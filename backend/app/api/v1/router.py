@@ -19,20 +19,6 @@ orchestrator = MultiAgentOrchestrator(agent_manager)
 conversation_memory = ConversationMemory()
 
 
-@router.get("/")
-def root():
-    return {
-        "message": "AI Agent Platform API"
-    }
-
-
-@router.get("/health")
-def health():
-    return {
-        "status": "ok"
-    }
-
-
 @router.post("/api/v1/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     history = conversation_memory.get_history(request.session_id) if request.session_id else None

@@ -18,5 +18,9 @@ class Settings(BaseSettings):
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION: str = "documents"
 
+    # Comma-separated API keys. Empty = auth disabled (local dev only --
+    # must be set before this is reachable outside localhost).
+    API_KEYS: str = ""
+
 
 settings = Settings()
