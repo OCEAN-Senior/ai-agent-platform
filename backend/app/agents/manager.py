@@ -3,6 +3,7 @@ from backend.app.agents.coder_agent import CoderAgent
 from backend.app.agents.planner_agent import PlannerAgent
 from backend.app.agents.research_agent import ResearchAgent
 from backend.app.agents.simple_chat_agent import SimpleChatAgent
+from backend.app.agents.tool_agent import ToolAgent
 
 
 class AgentNotFoundError(Exception):
@@ -20,6 +21,7 @@ class AgentManager:
             "planner_agent": PlannerAgent(),
             "research_agent": ResearchAgent(),
             "coder_agent": CoderAgent(),
+            "tool_agent": ToolAgent(),
         }
 
     def get_agent(self, name: str) -> BaseAgent:
