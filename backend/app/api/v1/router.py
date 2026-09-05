@@ -1,4 +1,7 @@
+import json
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from backend.app.agents.base import AgentInput, AgentResult
 from backend.app.agents.manager import AgentExecutionError, AgentManager, AgentNotFoundError
@@ -8,7 +11,7 @@ from backend.app.schemas.chat import ChatHistoryResponse, ChatRequest, ChatRespo
 from backend.app.schemas.execution import ExecuteCodeRequest, ExecuteCodeResponse
 from backend.app.schemas.orchestration import OrchestrateRequest, OrchestrateResponse
 from backend.app.schemas.rag import IngestRequest, IngestResponse, RagQueryRequest, RagQueryResponse
-from backend.app.services.chat_service import get_chat_response
+from backend.app.services.chat_service import get_chat_response, stream_chat_response
 from backend.app.services.execution.sandbox import run_python_code
 from backend.app.services.memory.conversation_memory import ConversationMemory
 from backend.app.services.rag.rag_service import ingest_document, retrieve_context
@@ -26,6 +29,22 @@ async def chat(request: ChatRequest) -> ChatResponse:
     if request.session_id:
         conversation_memory.add_exchange(request.session_id, request.message, reply)
     return ChatResponse(response=reply)
+
+
+@router.post("/api/v1/chat/stream")
+async def chat_stream(request: ChatRequest) -> StreamingResponse:
+    history = conversation_memory.get_history(request.session_id) if request.session_id else None
+
+    async def event_generator():
+        full_response = ""
+        async for token in stream_chat_response(request.message, history=history):
+            full_response += token
+            yield f"data: {json.dumps({'token': token})}\n\n"
+        if request.session_id:
+            conversation_memory.add_exchange(request.session_id, request.message, full_response)
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.get("/api/v1/chat/{session_id}/history", response_model=ChatHistoryResponse)
