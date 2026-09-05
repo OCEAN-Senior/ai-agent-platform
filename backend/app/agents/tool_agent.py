@@ -1,7 +1,11 @@
+import logging
+
 from backend.app.agents.base import AgentInput, AgentResult, BaseAgent
 from backend.app.services.llm.factory import get_llm_provider
 from backend.app.services.mcp.mcp_client import mcp_tool_client
 from backend.app.services.tools.registry import TOOL_REGISTRY
+
+logger = logging.getLogger("ai_agent_platform.tool_agent")
 
 MAX_TOOL_ITERATIONS = 3
 
@@ -15,6 +19,7 @@ class ToolAgent(BaseAgent):
         try:
             mcp_schemas = await mcp_tool_client.list_tools()
         except Exception:
+            logger.warning("MCP server unavailable, continuing with local tools only", exc_info=True)
             mcp_schemas = []
         mcp_tool_names = {schema["function"]["name"] for schema in mcp_schemas}
         tool_schemas = local_schemas + mcp_schemas
@@ -35,6 +40,7 @@ class ToolAgent(BaseAgent):
             for call in tool_calls:
                 fn_name = call["function"]["name"]
                 fn_args = call["function"].get("arguments") or {}
+                logger.info("tool_call=%s args=%s", fn_name, fn_args)
                 if fn_name in mcp_tool_names:
                     result = await mcp_tool_client.call_tool(fn_name, fn_args)
                 else:
@@ -43,6 +49,7 @@ class ToolAgent(BaseAgent):
                 tools_used.append(fn_name)
                 messages.append({"role": "tool", "content": str(result), "name": fn_name})
 
+        logger.warning("tool_agent reached max iterations (%d)", MAX_TOOL_ITERATIONS)
         final_message = await provider.chat_with_tools(messages, [])
         return AgentResult(
             output=final_message.get("content", ""),

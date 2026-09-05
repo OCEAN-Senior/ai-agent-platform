@@ -1,6 +1,10 @@
+import logging
+
 from backend.app.agents.base import AgentInput, AgentResult, BaseAgent
 from backend.app.services.chat_service import get_chat_response
 from backend.app.services.rag.rag_service import retrieve_context
+
+logger = logging.getLogger("ai_agent_platform.research_agent")
 
 RESEARCH_PROMPT_WITH_CONTEXT = (
     "You are a research assistant. Use the context below if it is relevant "
@@ -24,6 +28,7 @@ class ResearchAgent(BaseAgent):
         try:
             context_chunks = await retrieve_context(agent_input.task)
         except Exception:
+            logger.warning("RAG retrieval failed, falling back to knowledge-only", exc_info=True)
             context_chunks = []
 
         if context_chunks:
