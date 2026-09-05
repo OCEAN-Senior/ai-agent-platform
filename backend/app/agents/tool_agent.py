@@ -1,5 +1,6 @@
 from backend.app.agents.base import AgentInput, AgentResult, BaseAgent
 from backend.app.services.llm.factory import get_llm_provider
+from backend.app.services.mcp.mcp_client import mcp_tool_client
 from backend.app.services.tools.registry import TOOL_REGISTRY
 
 MAX_TOOL_ITERATIONS = 3
@@ -10,7 +11,14 @@ class ToolAgent(BaseAgent):
 
     async def run(self, agent_input: AgentInput) -> AgentResult:
         provider = get_llm_provider()
-        tool_schemas = [tool.to_ollama_schema() for tool in TOOL_REGISTRY.values()]
+        local_schemas = [tool.to_ollama_schema() for tool in TOOL_REGISTRY.values()]
+        try:
+            mcp_schemas = await mcp_tool_client.list_tools()
+        except Exception:
+            mcp_schemas = []
+        mcp_tool_names = {schema["function"]["name"] for schema in mcp_schemas}
+        tool_schemas = local_schemas + mcp_schemas
+
         messages: list[dict] = [{"role": "user", "content": agent_input.task}]
         tools_used: list[str] = []
 
@@ -27,8 +35,11 @@ class ToolAgent(BaseAgent):
             for call in tool_calls:
                 fn_name = call["function"]["name"]
                 fn_args = call["function"].get("arguments") or {}
-                tool = TOOL_REGISTRY.get(fn_name)
-                result = tool.func(**fn_args) if tool else f"Error: unknown tool '{fn_name}'"
+                if fn_name in mcp_tool_names:
+                    result = await mcp_tool_client.call_tool(fn_name, fn_args)
+                else:
+                    tool = TOOL_REGISTRY.get(fn_name)
+                    result = tool.func(**fn_args) if tool else f"Error: unknown tool '{fn_name}'"
                 tools_used.append(fn_name)
                 messages.append({"role": "tool", "content": str(result), "name": fn_name})
 
