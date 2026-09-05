@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Agent Platform — Test Panel</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --border: #2a2e37;
+    --text: #e6e8eb;
+    --muted: #8b93a1;
+    --accent: #5b8cff;
+    --ok: #4caf7d;
+    --err: #e5534b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header .key-box { display: flex; align-items: center; gap: 8px; }
+  header input {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    width: 220px;
+  }
+  nav {
+    display: flex;
+    gap: 4px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  nav button {
+    background: none;
+    border: none;
+    color: var(--muted);
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    border-bottom: 2px solid transparent;
+  }
+  nav button.active { color: var(--text); border-bottom-color: var(--accent); }
+  main { padding: 20px; max-width: 900px; margin: 0 auto; }
+  .tab { display: none; }
+  .tab.active { display: block; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+  select, textarea, input[type=text], input[type=number] {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  textarea { min-height: 90px; resize: vertical; font-family: ui-monospace, monospace; }
+  button.run {
+    margin-top: 14px;
+    background: var(--accent);
+    border: none;
+    color: white;
+    padding: 9px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button.run:disabled { opacity: 0.5; cursor: default; }
+  button.secondary {
+    margin-top: 14px;
+    margin-left: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 18px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .result {
+    margin-top: 16px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    display: none;
+  }
+  .result.show { display: block; }
+  .result .status { font-size: 12px; margin-bottom: 8px; }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, monospace;
+    font-size: 12.5px;
+    margin: 0;
+    color: var(--text);
+  }
+  .meta-label { font-size: 11px; color: var(--muted); margin-top: 12px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .chat-log { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; max-height: 400px; overflow-y: auto; }
+  .msg { padding: 8px 12px; border-radius: 8px; font-size: 13px; max-width: 80%; }
+  .msg.user { background: var(--accent); align-self: flex-end; }
+  .msg.assistant { background: var(--panel); border: 1px solid var(--border); align-self: flex-start; }
+  .row { display: flex; gap: 8px; align-items: flex-end; }
+  .row > div { flex: 1; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  .hint { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AI Agent Platform — Test Panel</h1>
+  <div class="key-box">
+    <span style="font-size:12px;color:var(--muted)">API key</span>
+    <input id="apiKey" type="text" placeholder="Bearer token (optional)" />
+  </div>
+</header>
+
+<nav>
+  <button class="tab-btn active" data-tab="runner">Agent Runner</button>
+  <button class="tab-btn" data-tab="orchestrate">Orchestrate</button>
+  <button class="tab-btn" data-tab="chat">Chat</button>
+  <button class="tab-btn" data-tab="rag">RAG</button>
+  <button class="tab-btn" data-tab="execute">Execute</button>
+</nav>
+
+<main>
+
+  <!-- Agent Runner -->
+  <section id="tab-runner" class="tab active">
+    <label>Agent</label>
+    <select id="agentSelect">
+      <option value="simple_chat_agent">simple_chat_agent</option>
+      <option value="planner_agent">planner_agent</option>
+      <option value="research_agent">research_agent</option>
+      <option value="coder_agent">coder_agent</option>
+      <option value="tool_agent">tool_agent</option>
+    </select>
+    <label>Task</label>
+    <textarea id="agentTask" placeholder="e.g. Write a function that reverses a string"></textarea>
+    <button class="run" id="runAgentBtn">Run</button>
+    <div class="result" id="agentResult">
+      <div class="status" id="agentStatus"></div>
+      <div class="meta-label">Output</div>
+      <pre id="agentOutput"></pre>
+      <div class="meta-label">Metadata</div>
+      <pre id="agentMetadata"></pre>
+    </div>
+  </section>
+
+  <!-- Orchestrate -->
+  <section id="tab-orchestrate" class="tab">
+    <label>Task</label>
+    <textarea id="orchTask" placeholder="e.g. Build a small REST API for a todo list and explain how it works"></textarea>
+    <div class="hint">Runs Planner → Research/Coder per subtask (max 5) → Synthesizer. Can take 15-60s.</div>
+    <button class="run" id="runOrchBtn">Run</button>
+    <div class="result" id="orchResult">
+      <div class="status" id="orchStatus"></div>
+      <div class="meta-label">Plan</div>
+      <pre id="orchPlan"></pre>
+      <div class="meta-label">Subtask results</div>
+      <table id="orchTable"><thead><tr><th>Agent</th><th>Subtask</th><th>Output</th></tr></thead><tbody></tbody></table>
+      <div class="meta-label">Final answer</div>
+      <pre id="orchFinal"></pre>
+    </div>
+  </section>
+
+  <!-- Chat -->
+  <section id="tab-chat" class="tab">
+    <label>Session ID</label>
+    <div class="row">
+      <div><input id="chatSession" type="text" /></div>
+      <button class="secondary" id="newSessionBtn" style="margin-top:0">New session</button>
+      <button class="secondary" id="clearHistoryBtn" style="margin-top:0">Clear history</button>
+    </div>
+    <div class="chat-log" id="chatLog"></div>
+    <label>Message</label>
+    <div class="row">
+      <div><input id="chatMessage" type="text" placeholder="Type a message..." /></div>
+      <button class="run" id="sendChatBtn" style="margin-top:0">Send</button>
+    </div>
+  </section>
+
+  <!-- RAG -->
+  <section id="tab-rag" class="tab">
+    <label>Ingest a document</label>
+    <textarea id="ragText" placeholder="Paste text to ingest into the vector store..."></textarea>
+    <button class="run" id="ingestBtn">Ingest</button>
+    <div class="result" id="ingestResult"><pre id="ingestOutput"></pre></div>
+
+    <label style="margin-top:24px">Query</label>
+    <input id="ragQuery" type="text" placeholder="What do you want to retrieve?" />
+    <button class="run" id="ragQueryBtn">Query</button>
+    <div class="result" id="ragResult">
+      <div class="meta-label">Retrieved context</div>
+      <pre id="ragOutput"></pre>
+    </div>
+  </section>
+
+  <!-- Execute -->
+  <section id="tab-execute" class="tab">
+    <label>Python code</label>
+    <textarea id="execCode" placeholder="print('hello world')" style="min-height:140px"></textarea>
+    <div class="hint">Runs in an isolated, network-disabled Docker container.</div>
+    <button class="run" id="execBtn">Run</button>
+    <div class="result" id="execResult">
+      <div class="status" id="execStatus"></div>
+      <div class="meta-label">stdout</div>
+      <pre id="execStdout"></pre>
+      <div class="meta-label">stderr</div>
+      <pre id="execStderr"></pre>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  const apiKeyInput = document.getElementById('apiKey');
+  apiKeyInput.value = localStorage.getItem('apiKey') || '';
+  apiKeyInput.addEventListener('input', () => localStorage.setItem('apiKey', apiKeyInput.value));
+
+  function authHeaders() {
+    const headers = { 'Content-Type': 'application/json' };
+    if (apiKeyInput.value.trim()) headers['Authorization'] = 'Bearer ' + apiKeyInput.value.trim();
+    return headers;
+  }
+
+  async function api(path, options = {}) {
+    const res = await fetch(path, { ...options, headers: { ...authHeaders(), ...(options.headers || {}) } });
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = text; }
+    return { ok: res.ok, status: res.status, data };
+  }
+
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // Agent Runner
+  document.getElementById('runAgentBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('runAgentBtn');
+    const agent = document.getElementById('agentSelect').value;
+    const task = document.getElementById('agentTask').value;
+    const resultBox = document.getElementById('agentResult');
+    const statusEl = document.getElementById('agentStatus');
+    btn.disabled = true; btn.textContent = 'Running...';
+    resultBox.classList.add('show');
+    statusEl.textContent = 'Running ' + agent + '...';
+    statusEl.className = 'status';
+    try {
+      const { ok, status, data } = await api('/api/v1/agent/run', {
+        method: 'POST',
+        body: JSON.stringify({ agent, task }),
+      });
+      statusEl.textContent = ok ? 'HTTP ' + status + ' OK' : 'HTTP ' + status + ' — ' + (data.detail || 'error');
+      statusEl.className = 'status ' + (ok ? 'ok' : 'err');
+      document.getElementById('agentOutput').textContent = ok ? (data.output || '') : JSON.stringify(data, null, 2);
+      document.getElementById('agentMetadata').textContent = ok ? JSON.stringify(data.metadata || {}, null, 2) : '';
+    } catch (e) {
+      statusEl.textContent = 'Request failed: ' + e.message;
+      statusEl.className = 'status err';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Run';
+    }
+  });
+
+  // Orchestrate
+  document.getElementById('runOrchBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('runOrchBtn');
+    const task = document.getElementById('orchTask').value;
+    const resultBox = document.getElementById('orchResult');
+    const statusEl = document.getElementById('orchStatus');
+    btn.disabled = true; btn.textContent = 'Running...';
+    resultBox.classList.add('show');
+    statusEl.textContent = 'Planning, running subtasks, synthesizing... this can take a while.';
+    statusEl.className = 'status';
+    document.querySelector('#orchTable tbody').innerHTML = '';
+    document.getElementById('orchPlan').textContent = '';
+    document.getElementById('orchFinal').textContent = '';
+    try {
+      const { ok, status, data } = await api('/api/v1/agent/orchestrate', {
+        method: 'POST',
+        body: JSON.stringify({ task }),
+      });
+      statusEl.textContent = ok ? 'HTTP ' + status + ' OK' : 'HTTP ' + status + ' — ' + (data.detail || 'error');
+      statusEl.className = 'status ' + (ok ? 'ok' : 'err');
+      if (ok) {
+        document.getElementById('orchPlan').textContent = (data.plan || []).join('\n');
+        const tbody = document.querySelector('#orchTable tbody');
+        (data.subtask_results || []).forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${r.agent}</td><td>${r.subtask}</td><td>${r.output}</td>`;
+          tbody.appendChild(tr);
+        });
+        document.getElementById('orchFinal').textContent = data.final_answer || '';
+      }
+    } catch (e) {
+      statusEl.textContent = 'Request failed: ' + e.message;
+      statusEl.className = 'status err';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Run';
+    }
+  });
+
+  // Chat
+  function genSessionId() { return 'session-' + Math.random().toString(36).slice(2, 10); }
+  const chatSessionInput = document.getElementById('chatSession');
+  chatSessionInput.value = localStorage.getItem('chatSessionId') || genSessionId();
+  localStorage.setItem('chatSessionId', chatSessionInput.value);
+  chatSessionInput.addEventListener('input', () => localStorage.setItem('chatSessionId', chatSessionInput.value));
+
+  function appendMsg(role, content) {
+    const log = document.getElementById('chatLog');
+    const div = document.createElement('div');
+    div.className = 'msg ' + role;
+    div.textContent = content;
+    log.appendChild(div);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  async function loadHistory() {
+    const sessionId = chatSessionInput.value.trim();
+    if (!sessionId) return;
+    const { ok, data } = await api('/api/v1/chat/' + encodeURIComponent(sessionId) + '/history');
+    document.getElementById('chatLog').innerHTML = '';
+    if (ok && data.history) {
+      data.history.forEach(m => appendMsg(m.role === 'user' ? 'user' : 'assistant', m.content));
+    }
+  }
+
+  document.getElementById('newSessionBtn').addEventListener('click', () => {
+    chatSessionInput.value = genSessionId();
+    localStorage.setItem('chatSessionId', chatSessionInput.value);
+    document.getElementById('chatLog').innerHTML = '';
+  });
+
+  document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
+    const sessionId = chatSessionInput.value.trim();
+    if (!sessionId) return;
+    await api('/api/v1/chat/' + encodeURIComponent(sessionId) + '/history', { method: 'DELETE' });
+    document.getElementById('chatLog').innerHTML = '';
+  });
+
+  document.getElementById('sendChatBtn').addEventListener('click', async () => {
+    const input = document.getElementById('chatMessage');
+    const message = input.value.trim();
+    if (!message) return;
+    const sessionId = chatSessionInput.value.trim();
+    appendMsg('user', message);
+    input.value = '';
+    const { ok, data } = await api('/api/v1/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, session_id: sessionId }),
+    });
+    appendMsg('assistant', ok ? (data.response || '') : ('Error: ' + (data.detail || JSON.stringify(data))));
+  });
+
+  document.getElementById('chatMessage').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('sendChatBtn').click();
+  });
+
+  loadHistory();
+
+  // RAG
+  document.getElementById('ingestBtn').addEventListener('click', async () => {
+    const text = document.getElementById('ragText').value;
+    const box = document.getElementById('ingestResult');
+    box.classList.add('show');
+    const { ok, data } = await api('/api/v1/documents/ingest', { method: 'POST', body: JSON.stringify({ text }) });
+    document.getElementById('ingestOutput').textContent = ok
+      ? `Ingested ${data.chunks_ingested} chunk(s).`
+      : 'Error: ' + JSON.stringify(data);
+  });
+
+  document.getElementById('ragQueryBtn').addEventListener('click', async () => {
+    const query = document.getElementById('ragQuery').value;
+    const box = document.getElementById('ragResult');
+    box.classList.add('show');
+    const { ok, data } = await api('/api/v1/rag/query', { method: 'POST', body: JSON.stringify({ query }) });
+    document.getElementById('ragOutput').textContent = ok
+      ? ((data.context || []).join('\n---\n') || '(no matching context found)')
+      : 'Error: ' + JSON.stringify(data);
+  });
+
+  // Execute
+  document.getElementById('execBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('execBtn');
+    const code = document.getElementById('execCode').value;
+    const box = document.getElementById('execResult');
+    const statusEl = document.getElementById('execStatus');
+    btn.disabled = true; btn.textContent = 'Running...';
+    box.classList.add('show');
+    statusEl.textContent = 'Executing in sandbox...';
+    statusEl.className = 'status';
+    try {
+      const { ok, data } = await api('/api/v1/execute', { method: 'POST', body: JSON.stringify({ code }) });
+      if (ok) {
+        statusEl.textContent = data.timed_out ? 'Timed out' : ('Exit code: ' + data.exit_code);
+        statusEl.className = 'status ' + (data.exit_code === 0 ? 'ok' : 'err');
+        document.getElementById('execStdout').textContent = data.stdout || '';
+        document.getElementById('execStderr').textContent = data.stderr || '';
+      } else {
+        statusEl.textContent = 'Error';
+        statusEl.className = 'status err';
+        document.getElementById('execStdout').textContent = '';
+        document.getElementById('execStderr').textContent = JSON.stringify(data);
+      }
+    } finally {
+      btn.disabled = false; btn.textContent = 'Run';
+    }
+  });
+</script>
+
+</body>
+</html>
