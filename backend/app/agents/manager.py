@@ -1,4 +1,5 @@
 from backend.app.agents.base import AgentInput, AgentResult, BaseAgent
+from backend.app.agents.planner_agent import PlannerAgent
 from backend.app.agents.simple_chat_agent import SimpleChatAgent
 
 
@@ -14,6 +15,7 @@ class AgentManager:
     def __init__(self) -> None:
         self._agents: dict[str, BaseAgent] = {
             "simple_chat_agent": SimpleChatAgent(),
+            "planner_agent": PlannerAgent(),
         }
 
     def get_agent(self, name: str) -> BaseAgent:
