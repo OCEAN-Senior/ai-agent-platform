@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"
     OLLAMA_CODER_MODEL: str = "qwen2.5-coder:7b"
+    EMBEDDING_MODEL: str = "nomic-embed-text"
+
+    QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_COLLECTION: str = "documents"
 
 
 settings = Settings()

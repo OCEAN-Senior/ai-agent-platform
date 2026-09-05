@@ -6,8 +6,10 @@ from backend.app.agents.orchestrator import MultiAgentOrchestrator
 from backend.app.schemas.agent import AgentRunRequest
 from backend.app.schemas.chat import ChatHistoryResponse, ChatRequest, ChatResponse
 from backend.app.schemas.orchestration import OrchestrateRequest, OrchestrateResponse
+from backend.app.schemas.rag import IngestRequest, IngestResponse, RagQueryRequest, RagQueryResponse
 from backend.app.services.chat_service import get_chat_response
 from backend.app.services.memory.conversation_memory import ConversationMemory
+from backend.app.services.rag.rag_service import ingest_document, retrieve_context
 
 router = APIRouter()
 agent_manager = AgentManager()
@@ -68,3 +70,15 @@ async def orchestrate(request: OrchestrateRequest) -> OrchestrateResponse:
         return await orchestrator.run(request.task)
     except AgentExecutionError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.post("/api/v1/documents/ingest", response_model=IngestResponse)
+async def ingest(request: IngestRequest) -> IngestResponse:
+    chunks_ingested = await ingest_document(request.text)
+    return IngestResponse(chunks_ingested=chunks_ingested)
+
+
+@router.post("/api/v1/rag/query", response_model=RagQueryResponse)
+async def rag_query(request: RagQueryRequest) -> RagQueryResponse:
+    context = await retrieve_context(request.query, top_k=request.top_k)
+    return RagQueryResponse(query=request.query, context=context)
