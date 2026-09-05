@@ -9,13 +9,14 @@ class OllamaProvider(LLMProvider):
         self.base_url = base_url or settings.OLLAMA_BASE_URL
         self.model = model or settings.OLLAMA_MODEL
 
-    async def chat(self, message: str) -> str:
+    async def chat(self, message: str, history: list[dict[str, str]] | None = None) -> str:
+        messages = [*(history or []), {"role": "user", "content": message}]
         async with httpx.AsyncClient(timeout=60.0) as client:
             result = await client.post(
                 f"{self.base_url}/api/chat",
                 json={
                     "model": self.model,
-                    "messages": [{"role": "user", "content": message}],
+                    "messages": messages,
                     "stream": False,
                 },
             )

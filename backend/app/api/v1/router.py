@@ -4,13 +4,15 @@ from backend.app.agents.base import AgentInput, AgentResult
 from backend.app.agents.manager import AgentExecutionError, AgentManager, AgentNotFoundError
 from backend.app.agents.orchestrator import MultiAgentOrchestrator
 from backend.app.schemas.agent import AgentRunRequest
-from backend.app.schemas.chat import ChatRequest, ChatResponse
+from backend.app.schemas.chat import ChatHistoryResponse, ChatRequest, ChatResponse
 from backend.app.schemas.orchestration import OrchestrateRequest, OrchestrateResponse
 from backend.app.services.chat_service import get_chat_response
+from backend.app.services.memory.conversation_memory import ConversationMemory
 
 router = APIRouter()
 agent_manager = AgentManager()
 orchestrator = MultiAgentOrchestrator(agent_manager)
+conversation_memory = ConversationMemory()
 
 
 @router.get("/")
@@ -29,8 +31,22 @@ def health():
 
 @router.post("/api/v1/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    reply = await get_chat_response(request.message)
+    history = conversation_memory.get_history(request.session_id) if request.session_id else None
+    reply = await get_chat_response(request.message, history=history)
+    if request.session_id:
+        conversation_memory.add_exchange(request.session_id, request.message, reply)
     return ChatResponse(response=reply)
+
+
+@router.get("/api/v1/chat/{session_id}/history", response_model=ChatHistoryResponse)
+def get_chat_history(session_id: str) -> ChatHistoryResponse:
+    return ChatHistoryResponse(session_id=session_id, history=conversation_memory.get_history(session_id))
+
+
+@router.delete("/api/v1/chat/{session_id}/history")
+def clear_chat_history(session_id: str) -> dict:
+    conversation_memory.clear(session_id)
+    return {"status": "cleared", "session_id": session_id}
 
 
 @router.post("/api/v1/agent/run", response_model=AgentResult)
