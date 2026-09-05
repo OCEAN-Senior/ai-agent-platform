@@ -5,9 +5,11 @@ from backend.app.agents.manager import AgentExecutionError, AgentManager, AgentN
 from backend.app.agents.orchestrator import MultiAgentOrchestrator
 from backend.app.schemas.agent import AgentRunRequest
 from backend.app.schemas.chat import ChatHistoryResponse, ChatRequest, ChatResponse
+from backend.app.schemas.execution import ExecuteCodeRequest, ExecuteCodeResponse
 from backend.app.schemas.orchestration import OrchestrateRequest, OrchestrateResponse
 from backend.app.schemas.rag import IngestRequest, IngestResponse, RagQueryRequest, RagQueryResponse
 from backend.app.services.chat_service import get_chat_response
+from backend.app.services.execution.sandbox import run_python_code
 from backend.app.services.memory.conversation_memory import ConversationMemory
 from backend.app.services.rag.rag_service import ingest_document, retrieve_context
 
@@ -82,3 +84,14 @@ async def ingest(request: IngestRequest) -> IngestResponse:
 async def rag_query(request: RagQueryRequest) -> RagQueryResponse:
     context = await retrieve_context(request.query, top_k=request.top_k)
     return RagQueryResponse(query=request.query, context=context)
+
+
+@router.post("/api/v1/execute", response_model=ExecuteCodeResponse)
+async def execute_code(request: ExecuteCodeRequest) -> ExecuteCodeResponse:
+    result = await run_python_code(request.code, timeout=request.timeout)
+    return ExecuteCodeResponse(
+        stdout=result.stdout,
+        stderr=result.stderr,
+        exit_code=result.exit_code,
+        timed_out=result.timed_out,
+    )
