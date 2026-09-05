@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION: str = "documents"
 
+    # Self-hosted SearXNG instance for the web_search tool -- no API key,
+    # no third-party account, queries never leave our own infrastructure.
+    SEARXNG_URL: str = "http://localhost:8080"
+
     # Comma-separated API keys. Empty = auth disabled (local dev only --
     # must be set before this is reachable outside localhost).
     API_KEYS: str = ""

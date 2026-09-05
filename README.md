@@ -1,21 +1,23 @@
 # AI Agent Platform
 
 A local-first, extensible AI agent platform: FastAPI backend, Ollama-backed
-LLMs, multiple specialized agents, RAG, tool calling (including MCP), a
-sandboxed code executor, and a small test-panel frontend.
+LLMs, multiple specialized agents, RAG, tool calling (including MCP and
+self-hosted web search), a sandboxed code executor, and a small test-panel
+frontend. No data leaves the machine to any third-party API.
 
 ## Texnologiyalar
 
 - Python, FastAPI, Uvicorn, Pydantic
 - Ollama (local LLM + embeddings)
 - Qdrant (vector DB / RAG)
+- SearXNG (self-hosted, private web search -- no API key, nothing sent to a third party)
 - MCP (Model Context Protocol)
 - Docker, Docker Compose
 
 ## Quick start
 
 ```bash
-cp .env.example .env      # then set API_KEYS, review OLLAMA_* / QDRANT_*
+cp .env.example .env      # then set API_KEYS, review OLLAMA_* / QDRANT_* / SEARXNG_URL
 docker compose up -d --build
 ```
 
@@ -42,7 +44,7 @@ All `/api/v1/*` routes require `Authorization: Bearer <key>` once `API_KEYS` is 
 - `planner_agent` -- breaks a task into numbered subtasks
 - `research_agent` -- answers using RAG context when available, else its own knowledge (`metadata.source` says which)
 - `coder_agent` -- uses a separate code model, auto-runs its own generated code in the sandbox and reports the result
-- `tool_agent` -- real LLM tool-calling: a local registry (calculator, clock) plus tools from an MCP server, merged into one call loop
+- `tool_agent` -- real LLM tool-calling: a local registry (calculator, clock, self-hosted web search) plus tools from an MCP server, merged into one call loop
 
 ## Project layout
 
@@ -51,15 +53,16 @@ All `/api/v1/*` routes require `Authorization: Bearer <key>` once `API_KEYS` is 
 - `backend/app/agents/` -- `base.py` (BaseAgent/AgentInput/AgentResult), `manager.py` (AgentManager), `orchestrator.py`, and one file per agent
 - `backend/app/services/llm/` -- `LLMProvider` abstraction (`base.py`), `OllamaProvider`, `factory.py`
 - `backend/app/services/rag/`, `services/embeddings/` -- Qdrant vector store + Ollama embeddings
+- `backend/app/services/tools/registry.py` -- local tools (calculator, clock, `web_search` via SearXNG)
 - `backend/app/services/mcp/` -- MCP client; `mcp_servers/example_server.py` is the bundled demo MCP server
 - `backend/app/services/execution/sandbox.py` -- Docker-based sandboxed code execution
 - `backend/app/services/memory/conversation_memory.py` -- in-process short-term chat memory
 - `backend/app/core/` -- `config.py` (env-driven settings), `security.py` (API key auth), `logging_config.py`
 - `frontend/index.html` -- single-file test panel (no build step), served at `/ui`
 - `mcp_servers/` -- MCP servers this backend connects to as a client
+- `searxng/settings.yml` -- config for the self-hosted search engine (enables its JSON API for our own use)
 
 ## Not yet built
 
-- Web search (needs a Tavily API key -- opt-in, not created on your behalf)
-- Persistent/long-term memory and a real user/project database (Postgres) -- deferred until actually needed
+- Long-term/persistent memory and a real user/project database (Postgres) -- deferred until actually needed
 - Multi-worker scaling (blocked on moving `ConversationMemory` to a shared store first -- see `DEPLOYMENT.md`)

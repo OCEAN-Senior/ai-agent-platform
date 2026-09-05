@@ -1,3 +1,4 @@
+import inspect
 import logging
 
 from backend.app.agents.base import AgentInput, AgentResult, BaseAgent
@@ -45,7 +46,12 @@ class ToolAgent(BaseAgent):
                     result = await mcp_tool_client.call_tool(fn_name, fn_args)
                 else:
                     tool = TOOL_REGISTRY.get(fn_name)
-                    result = tool.func(**fn_args) if tool else f"Error: unknown tool '{fn_name}'"
+                    if tool is None:
+                        result = f"Error: unknown tool '{fn_name}'"
+                    elif inspect.iscoroutinefunction(tool.func):
+                        result = await tool.func(**fn_args)
+                    else:
+                        result = tool.func(**fn_args)
                 tools_used.append(fn_name)
                 messages.append({"role": "tool", "content": str(result), "name": fn_name})
 

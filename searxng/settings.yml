@@ -1,0 +1,13 @@
+use_default_settings: true
+
+general:
+  instance_name: "ai-agent-platform-search"
+
+server:
+  secret_key: "8e3e3e1cb53470e33da5720f4e60ec329da5902d7d62aee37f4dc3470bf50bcf"
+  limiter: false
+
+search:
+  formats:
+    - html
+    - json
