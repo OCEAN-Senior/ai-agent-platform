@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from backend.app.schemas.chat import ChatRequest, ChatResponse
-from backend.app.services.ollama_service import generate_chat_response
+from backend.app.services.chat_service import get_chat_response
 
 router = APIRouter()
 
@@ -22,5 +22,5 @@ def health():
 
 @router.post("/api/v1/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
-    reply = await generate_chat_response(request.message)
+    reply = await get_chat_response(request.message)
     return ChatResponse(response=reply)

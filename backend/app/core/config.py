@@ -8,6 +8,8 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"
     APP_ENV: str = "development"
 
+    LLM_PROVIDER: str = "ollama"
+
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1:8b"
 
