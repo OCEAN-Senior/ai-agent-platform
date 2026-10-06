@@ -5,6 +5,12 @@ services:
       - "8000:8000"
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      # Provider choice + gateway key come from .env via compose interpolation;
+      # only these are passed in, so the rest of .env (e.g. API_KEYS) doesn't leak in.
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - OPENAI_COMPAT_BASE_URL=http://host.docker.internal:20128/v1
+      - OPENAI_COMPAT_API_KEY=${OPENAI_COMPAT_API_KEY:-}
+      - OPENAI_COMPAT_MODEL_PREFIX=${OPENAI_COMPAT_MODEL_PREFIX:-ollama/}
       - OLLAMA_MODEL=llama3.1:8b
       - QDRANT_URL=http://qdrant:6333
       - SEARXNG_URL=http://searxng:8080
