@@ -27,7 +27,9 @@ async def chat(request: ChatRequest) -> ChatResponse:
     history = conversation_memory.get_history(request.session_id) if request.session_id else None
     reply = await get_chat_response(request.message, history=history)
     if request.session_id:
-        conversation_memory.add_exchange(request.session_id, request.message, reply)
+        conversation_memory.add_exchange(
+            request.session_id, request.message, reply, user_name=request.user_name
+        )
     return ChatResponse(response=reply)
 
 
@@ -41,7 +43,9 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
             full_response += token
             yield f"data: {json.dumps({'token': token})}\n\n"
         if request.session_id:
-            conversation_memory.add_exchange(request.session_id, request.message, full_response)
+            conversation_memory.add_exchange(
+                request.session_id, request.message, full_response, user_name=request.user_name
+            )
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

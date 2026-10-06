@@ -32,9 +32,7 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)" || exit 1
 
-# Single worker, intentionally: ConversationMemory (services/memory/) is
-# an in-process dict, not a shared store. Multiple workers/replicas would
-# each get their own copy, silently fragmenting chat history per request.
-# Don't add --workers here until memory is backed by something shared
-# (e.g. Redis) -- that's follow-up work, not part of this milestone.
+# Single worker: ConversationMemory is a local SQLite file (app_data volume).
+# It survives restarts, but isn't meant to be shared by several replicas --
+# move it to a real database before scaling out.
 CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

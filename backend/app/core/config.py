@@ -33,5 +33,25 @@ class Settings(BaseSettings):
     # must be set before this is reachable outside localhost).
     API_KEYS: str = ""
 
+    # Where persistent data lives (SQLite conversation memory). In Docker this is
+    # the app_data volume mounted at /app/data.
+    DATA_DIR: str = "data"
+    # System prompt for /chat (Telegram bot, /ui). Empty = none.
+    CHAT_SYSTEM_PROMPT: str = (
+        "You are a helpful, concise work assistant for a small team. "
+        "Always reply in Uzbek (o'zbek tili, Latin script) unless the user explicitly "
+        "asks for another language. Don't mix in English sentences."
+    )
+    # How many recent messages are sent to the model as context per session.
+    MEMORY_MAX_MESSAGES: int = 20
+
+    # Telegram bot (separate process: python -m backend.app.telegram.bot).
+    TELEGRAM_BOT_TOKEN: str = ""
+    # Comma-separated numeric Telegram user IDs allowed to use the bot.
+    TELEGRAM_ALLOWED_USER_IDS: str = ""
+    # How the bot reaches this platform's API, and the key if API_KEYS is enabled.
+    PLATFORM_URL: str = "http://127.0.0.1:8000"
+    PLATFORM_API_KEY: str = ""
+
 
 settings = Settings()

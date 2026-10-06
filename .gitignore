@@ -12,6 +12,9 @@ env/
 # Environment variables
 .env
 
+# Local persistent data (SQLite memory)
+data/
+
 # OS / Editor
 .DS_Store
 .vscode/

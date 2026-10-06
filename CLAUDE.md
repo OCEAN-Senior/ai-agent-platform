@@ -21,9 +21,15 @@
 | RAG | `services/rag/` + Qdrant; embedding har doim to'g'ridan-to'g'ri Ollama (`nomic-embed-text`) |
 | Tools / MCP / Sandbox | `services/tools/registry.py`, `services/mcp/`, `mcp_servers/example_server.py`, `services/execution/sandbox.py` |
 | Frontend | `frontend/index.html` → `/ui` |
+| Suhbat xotirasi | `services/memory/conversation_memory.py` — SQLite (`DATA_DIR/conversations.db`, Docker volume `app_data`). Hamma xabar abadiy saqlanadi (admin uchun); `clear()` faqat model kontekstini yangilaydi |
+| Telegram bot (xodimlar uchun) | `backend/app/telegram/bot.py` — alohida compose xizmati `telegram-bot`, platformaga HTTP API orqali ulanadi (session `tg:<user_id>`), allowlist `TELEGRAM_ALLOWED_USER_IDS` |
+| Chat system prompt | `CHAT_SYSTEM_PROMPT` (config) — standart: doim o'zbekcha javob |
 
 ## Ishga tushirish
-- Docker (asosiy): `docker compose up -d --build` → backend `127.0.0.1:8000`, qdrant `6333`, searxng `8080`.
+- Docker (asosiy): `docker compose up -d --build` → backend `127.0.0.1:8000`, qdrant `6333`, searxng `8080`, telegram-bot.
+- 2026-10-06 dan **AI Brain shu loyihaga birlashtirildi**; eski Windows loyihasi arxivda
+  (`C:\Users\user\Documents\_arxiv\ai-brain-2026-10-06`). Undagi qolgan imkoniyatlar (hujjat/jadval/rasm
+  tahlili, uzoq muddatli faktlar xotirasi) hali ko'chirilmagan — `PROGRESS.md` ga qarang.
 - **`localhost` emas, `127.0.0.1` ishlating** — localhost IPv6 ga ketib, Docker portida qotib qoladi.
 - Windows ish stolidagi "AI - Hammasini ishga tushirish" tugmasi hammasini ko'taradi
   (`C:\Users\user\Documents\ai-launcher\start_all.bat`).

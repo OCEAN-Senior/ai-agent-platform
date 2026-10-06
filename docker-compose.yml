@@ -17,6 +17,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
+      - app_data:/app/data
       # Lets the sandbox/MCP subprocess calls launch sibling containers on
       # the host's Docker engine (Docker-outside-of-Docker) -- see the note
       # in Dockerfile.
@@ -36,6 +37,22 @@ services:
         limits:
           cpus: "2"
           memory: 1g
+
+  telegram-bot:
+    build: .
+    command: ["python", "-m", "backend.app.telegram.bot"]
+    environment:
+      - PLATFORM_URL=http://backend:8000
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_ALLOWED_USER_IDS=${TELEGRAM_ALLOWED_USER_IDS:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    # Exits 0 when no token is configured, so it isn't restarted in a loop.
+    restart: on-failure
+    healthcheck:
+      # The image's HEALTHCHECK probes the API server, which this container doesn't run.
+      disable: true
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -57,3 +74,4 @@ services:
 
 volumes:
   qdrant_data:
+  app_data:

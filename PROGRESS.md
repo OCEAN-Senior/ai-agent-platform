@@ -2,6 +2,22 @@
 
 > Har sessiya oxirida yangilanadi. Eng yangi yozuv eng tepada.
 
+## 2026-10-06 (2) — AI Brain birlashtirildi (Milestone 21)
+**Qilindi**
+- Suhbat xotirasi doimiy (SQLite, volume `app_data`): restartdan keyin davom etadi; `/clear` tarixni o'chirmaydi.
+- Telegram bot platformaga ko'chirildi (`telegram-bot` xizmati): allowlist, /start (saqlanish haqida ogohlantirish),
+  /clear, uzun javoblarni bo'lish, "typing" ko'rsatkichi, bir vaqtda ko'p foydalanuvchi (concurrent_updates + chat lock).
+- Token va allowlist AI Brain `.env` dan ko'chirildi. `CHAT_SYSTEM_PROMPT` — doim o'zbekcha.
+- Sinovlar: xotira unit testi, restartdan keyin PELICAN-42 eslandi, regressiya (chat, tool, coder) o'tdi.
+
+**Keyingi qadamlar (xodimlar uchun bot rejasi)**
+- [ ] Telegram'da haqiqiy xabar bilan sinash (foydalanuvchi botga yozadi).
+- [ ] AI Brain'dan qolganlar: hujjat yuklash (RAG, har xodimga alohida), Excel/CSV tahlili, rasm tahlili, uzoq muddatli faktlar.
+- [ ] Navbat ko'rsatkichi ("Navbatingiz: N") va Ollama parallelligi (`OLLAMA_NUM_PARALLEL`).
+- [ ] Niqoblash/deniqoblash moduli + lokal → bulut (OmniRoute) yo'nalishi, xodim tasdig'i bilan.
+- [ ] Admin ko'rinishi: barcha suhbatlar faqat admin uchun (`sessions` + `messages` jadvallari tayyor).
+- [ ] Bot tokenini @BotFather orqali yangilash (avval eski logda ochiq turgan).
+
 ## 2026-10-06
 **Qilindi**
 - OmniRoute (AI gateway) WSL Docker'da o'rnatildi va Ollama ulandi (5 model).
