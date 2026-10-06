@@ -24,6 +24,7 @@
 | Suhbat xotirasi | `services/memory/conversation_memory.py` — SQLite (`DATA_DIR/conversations.db`, Docker volume `app_data`). Hamma xabar abadiy saqlanadi (admin uchun); `clear()` faqat model kontekstini yangilaydi |
 | Telegram bot (xodimlar uchun) | `backend/app/telegram/bot.py` — alohida compose xizmati `telegram-bot`, platformaga HTTP API orqali ulanadi (session `tg:<user_id>`), allowlist `TELEGRAM_ALLOWED_USER_IDS` |
 | Chat system prompt | `CHAT_SYSTEM_PROMPT` (config) — standart: doim o'zbekcha javob |
+| Modellar | `OLLAMA_MODEL` (chat/Telegram; `.env` da o'zbekcha `uzbek-llama-3.1-8B`), `OLLAMA_TOOL_MODEL` (tool_agent, `llama3.1:8b` — o'zbekcha model tool chaqirmaydi), `OLLAMA_CODER_MODEL` (`qwen2.5-coder:7b`) |
 
 ## Ishga tushirish
 - Docker (asosiy): `docker compose up -d --build` → backend `127.0.0.1:8000`, qdrant `6333`, searxng `8080`, telegram-bot.

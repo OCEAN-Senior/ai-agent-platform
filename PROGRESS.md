@@ -11,7 +11,10 @@
 - Sinovlar: xotira unit testi, restartdan keyin PELICAN-42 eslandi, regressiya (chat, tool, coder) o'tdi.
 
 **Keyingi qadamlar (xodimlar uchun bot rejasi)**
-- [ ] Telegram'da haqiqiy xabar bilan sinash (foydalanuvchi botga yozadi).
+- [x] Telegram'da haqiqiy xabar bilan sinaldi (@oqdaryo_ai_bot): javob OmniRoute orqali keldi, suhbat bazada saqlandi.
+- Chat modeli o'zbekcha `uzbek-llama-3.1-8B` ga o'tkazildi (`.env` OLLAMA_MODEL); tool_agent uchun alohida
+  `OLLAMA_TOOL_MODEL=llama3.1:8b` (o'zbekcha model tool chaqirmay matn yozib qo'ydi). Javob sifati 8B darajasida —
+  murakkab vazifalar uchun bulut zaxirasi (niqoblash bilan) rejada.
 - [ ] AI Brain'dan qolganlar: hujjat yuklash (RAG, har xodimga alohida), Excel/CSV tahlili, rasm tahlili, uzoq muddatli faktlar.
 - [ ] Navbat ko'rsatkichi ("Navbatingiz: N") va Ollama parallelligi (`OLLAMA_NUM_PARALLEL`).
 - [ ] Niqoblash/deniqoblash moduli + lokal → bulut (OmniRoute) yo'nalishi, xodim tasdig'i bilan.

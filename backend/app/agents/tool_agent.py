@@ -2,6 +2,7 @@ import inspect
 import logging
 
 from backend.app.agents.base import AgentInput, AgentResult, BaseAgent
+from backend.app.core.config import settings
 from backend.app.services.llm.factory import get_llm_provider
 from backend.app.services.mcp.mcp_client import mcp_tool_client
 from backend.app.services.tools.registry import TOOL_REGISTRY
@@ -15,7 +16,7 @@ class ToolAgent(BaseAgent):
     name = "tool_agent"
 
     async def run(self, agent_input: AgentInput) -> AgentResult:
-        provider = get_llm_provider()
+        provider = get_llm_provider(model=settings.OLLAMA_TOOL_MODEL)
         local_schemas = [tool.to_ollama_schema() for tool in TOOL_REGISTRY.values()]
         try:
             mcp_schemas = await mcp_tool_client.list_tools()
