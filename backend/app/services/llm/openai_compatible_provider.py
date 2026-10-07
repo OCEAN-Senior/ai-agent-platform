@@ -1,4 +1,5 @@
 import json
+import re
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -22,6 +23,7 @@ class OpenAICompatibleProvider(LLMProvider):
         api_key: str | None = None,
         model: str | None = None,
         model_prefix: str | None = None,
+        max_tokens: int | None = None,
     ):
         self.base_url = (base_url or settings.OPENAI_COMPAT_BASE_URL).rstrip("/")
         self.api_key = api_key if api_key is not None else settings.OPENAI_COMPAT_API_KEY
@@ -29,6 +31,7 @@ class OpenAICompatibleProvider(LLMProvider):
         # routing prefix (e.g. "ollama/") is added here.
         prefix = settings.OPENAI_COMPAT_MODEL_PREFIX if model_prefix is None else model_prefix
         self.model = prefix + (model or settings.OLLAMA_MODEL)
+        self.max_tokens = max_tokens
 
     async def chat(self, message: str, history: list[dict[str, str]] | None = None) -> str:
         messages = [*(history or []), {"role": "user", "content": message}]
@@ -44,7 +47,8 @@ class OpenAICompatibleProvider(LLMProvider):
         self, message: str, history: list[dict[str, str]] | None = None
     ) -> AsyncIterator[str]:
         messages = [*(history or []), {"role": "user", "content": message}]
-        payload = {"model": self.model, "messages": messages, "stream": True}
+        payload = {"model": self.model, "messages": messages, "stream": True, **self._limits()}
+        think_filter = ThinkFilter()
 
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
@@ -60,8 +64,12 @@ class OpenAICompatibleProvider(LLMProvider):
                         break
                     choices = json.loads(data).get("choices") or []
                     content = (choices[0].get("delta") or {}).get("content") if choices else None
-                    if content:
-                        yield content
+                    visible = think_filter.feed(content) if content else ""
+                    if visible:
+                        yield visible
+                tail = think_filter.flush()
+                if tail:
+                    yield tail
 
     async def _chat_request(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
@@ -70,6 +78,7 @@ class OpenAICompatibleProvider(LLMProvider):
             "model": self.model,
             "messages": _to_openai_messages(messages),
             "stream": False,
+            **self._limits(),
         }
         if tools:
             payload["tools"] = tools
@@ -80,6 +89,9 @@ class OpenAICompatibleProvider(LLMProvider):
             )
             result.raise_for_status()
             return _to_ollama_message(result.json()["choices"][0]["message"])
+
+    def _limits(self) -> dict[str, int]:
+        return {"max_tokens": self.max_tokens} if self.max_tokens else {}
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
@@ -120,7 +132,7 @@ def _to_openai_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _to_ollama_message(message: dict[str, Any]) -> dict[str, Any]:
     """Convert an OpenAI assistant message back to the Ollama shape agents expect."""
-    result: dict[str, Any] = {"role": "assistant", "content": message.get("content") or ""}
+    result: dict[str, Any] = {"role": "assistant", "content": strip_think(message.get("content") or "")}
     tool_calls = []
     for call in message.get("tool_calls") or []:
         fn = call.get("function") or {}
@@ -133,3 +145,50 @@ def _to_ollama_message(message: dict[str, Any]) -> dict[str, Any]:
     if tool_calls:
         result["tool_calls"] = tool_calls
     return result
+
+
+_THINK_BLOCK = re.compile(r"<think>.*?(?:</think>|\Z)", re.S)
+
+
+def strip_think(text: str) -> str:
+    """Remove reasoning-model <think>...</think> blocks (also an unterminated one at the end)."""
+    return _THINK_BLOCK.sub("", text).strip()
+
+
+class ThinkFilter:
+    """Streaming counterpart of strip_think: drops text inside <think>...</think> across chunks."""
+
+    def __init__(self) -> None:
+        self._buffer = ""
+        self._inside = False
+        self._started = False
+
+    def feed(self, chunk: str) -> str:
+        self._buffer += chunk
+        out = []
+        while True:
+            tag = "</think>" if self._inside else "<think>"
+            idx = self._buffer.find(tag)
+            if idx == -1:
+                # Keep a possible partial tag at the end for the next chunk.
+                keep = len(tag) - 1
+                safe, self._buffer = self._buffer[:-keep] if len(self._buffer) > keep else "", self._buffer[-keep:]
+                if not self._inside:
+                    out.append(safe)
+                break
+            if not self._inside:
+                out.append(self._buffer[:idx])
+            self._buffer = self._buffer[idx + len(tag):]
+            self._inside = not self._inside
+        return self._lstrip_once("".join(out))
+
+    def flush(self) -> str:
+        rest, self._buffer = ("" if self._inside else self._buffer), ""
+        return self._lstrip_once(rest)
+
+    def _lstrip_once(self, text: str) -> str:
+        # Reasoning models put blank lines after </think>; drop leading whitespace of the answer.
+        if not self._started:
+            text = text.lstrip()
+            self._started = bool(text)
+        return text

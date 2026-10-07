@@ -4,9 +4,9 @@ from backend.app.services.llm.ollama_provider import OllamaProvider
 from backend.app.services.llm.openai_compatible_provider import OpenAICompatibleProvider
 
 
-def get_llm_provider(model: str | None = None) -> LLMProvider:
+def get_llm_provider(model: str | None = None, max_tokens: int | None = None) -> LLMProvider:
     if settings.LLM_PROVIDER == "ollama":
         return OllamaProvider(model=model)
     if settings.LLM_PROVIDER == "openai_compatible":
-        return OpenAICompatibleProvider(model=model)
+        return OpenAICompatibleProvider(model=model, max_tokens=max_tokens)
     raise ValueError(f"Unknown LLM_PROVIDER: {settings.LLM_PROVIDER}")

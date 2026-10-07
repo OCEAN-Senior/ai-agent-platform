@@ -11,6 +11,8 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    # Which model answered (routing between chat and reasoning models).
+    model: str | None = None
 
 
 class ChatHistoryResponse(BaseModel):

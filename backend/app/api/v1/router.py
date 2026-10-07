@@ -2,12 +2,14 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from backend.app.agents.base import AgentInput, AgentResult
+from backend.app.core.config import settings
 from backend.app.agents.manager import AgentExecutionError, AgentManager, AgentNotFoundError
 from backend.app.agents.orchestrator import MultiAgentOrchestrator
 from backend.app.schemas.agent import AgentRunRequest
@@ -25,6 +27,7 @@ from backend.app.schemas.rag import IngestRequest, IngestResponse, RagQueryReque
 from backend.app.services.chat_service import get_chat_response, stream_chat_response
 from backend.app.services.cloud.cloud_service import CloudRequestError, CloudService
 from backend.app.services.execution.sandbox import run_python_code
+from backend.app.services.llm.model_router import choose_model
 from backend.app.services.files.extract import (
     DOCUMENT_TYPES,
     SPREADSHEET_TYPES,
@@ -38,6 +41,7 @@ from backend.app.services.rag.rag_service import (
     retrieve_context,
 )
 
+logger = logging.getLogger("ai_agent_platform.api")
 router = APIRouter()
 agent_manager = AgentManager()
 orchestrator = MultiAgentOrchestrator(agent_manager)
@@ -55,12 +59,22 @@ async def _prompt_for(request: ChatRequest) -> str:
 @router.post("/api/v1/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest) -> ChatResponse:
     history = conversation_memory.get_history(request.session_id) if request.session_id else None
-    reply = await get_chat_response(await _prompt_for(request), history=history)
+    model = choose_model(request.message, history)
+    prompt = await _prompt_for(request)
+    try:
+        reply = await get_chat_response(prompt, model=model, history=history)
+    except Exception:
+        if model is None:
+            raise
+        # The reasoning model is optional: if it's unavailable, still answer with the chat model.
+        logger.warning("reasoning model %s failed, falling back to chat model", model, exc_info=True)
+        model = None
+        reply = await get_chat_response(prompt, history=history)
     if request.session_id:
         conversation_memory.add_exchange(
             request.session_id, request.message, reply, user_name=request.user_name
         )
-    return ChatResponse(response=reply)
+    return ChatResponse(response=reply, model=model or settings.OLLAMA_MODEL)
 
 
 @router.post("/api/v1/chat/stream")
@@ -70,9 +84,18 @@ async def chat_stream(request: ChatRequest) -> StreamingResponse:
 
     async def event_generator():
         full_response = ""
-        async for token in stream_chat_response(prompt, history=history):
-            full_response += token
-            yield f"data: {json.dumps({'token': token})}\n\n"
+        model = choose_model(request.message, history)
+        try:
+            async for token in stream_chat_response(prompt, model=model, history=history):
+                full_response += token
+                yield f"data: {json.dumps({'token': token})}\n\n"
+        except Exception:
+            if model is None or full_response:
+                raise
+            logger.warning("reasoning model %s failed, falling back to chat model", model, exc_info=True)
+            async for token in stream_chat_response(prompt, history=history):
+                full_response += token
+                yield f"data: {json.dumps({'token': token})}\n\n"
         if request.session_id:
             conversation_memory.add_exchange(
                 request.session_id, request.message, full_response, user_name=request.user_name

@@ -2,6 +2,22 @@
 
 > Har sessiya oxirida yangilanadi. Eng yangi yozuv eng tepada.
 
+## 2026-10-07 — Milestone 25: savol turiga qarab avtomatik model tanlash ✅ (DeepSeek OmniRoute importi kutilmoqda)
+- Solishtirish (`ai-launcher/compare_models.py`, natijalar `compare_result*.txt`): hisob/jadval/mantiq savollarida
+  uzbek-llama-8k 0/3, deepseek-r1-8k 2/3 ("Sarda" ~ Sardor). O'zbekcha matnda ikkalasi zaif, faktlarda ikkalasi to'qiydi.
+  DeepSeek system prompt bilan butunlay ma'nosiz yozdi — ko'rsatma user xabariga qo'shilganda normal.
+- `services/llm/model_router.py`: qoidaga asoslangan tanlov (ifoda `47*89`, hisob so'zlari + raqam, mantiq so'zlari,
+  yaqinda Excel yuklangan bo'lsa) → `REASONING_MODEL` (`.env`: deepseek-r1-8k:latest), qolgani → OLLAMA_MODEL.
+- DeepSeek uchun: system prompt user xabariga qo'shiladi, `max_tokens=REASONING_MAX_TOKENS` (3072, aylanib qolmasin),
+  `<think>` bloklari javobdan va oqimdan olib tashlanadi (`strip_think`, `ThinkFilter`). `ChatResponse.model` — kim javob berdi.
+- Zaxira: reasoning model xato bersa → chat modeli javob beradi (logda "falling back"). Sinaldi: DeepSeek OmniRoute'da
+  hali import qilinmagan holatda 47*89 → 4183 (uzbek-llama).
+- `tests/test_model_router.py` (16 test) — jami 22 test o'tadi.
+- **Kutilmoqda:** foydalanuvchi OmniRoute'da Ollama provayderi → "Импорт из /модели" (va "Автоматически получать
+  модели из upstream" ni yoqish). Keyin `ai-launcher/m25_test.sh` bilan jonli tekshirish.
+- `start_all.bat`: Docker ishlamayotgan bo'lsa, ishga tushirishdan oldin eskirgan socket fayllarni WSL orqali tozalaydi
+  (qayta yoqishdan keyin Docker yiqilardi).
+
 ## 2026-10-07 — RAM: modellar GPU'ga sig'adigan qilindi ✅
 - Muammo: RAM 86% — `llama-server` 16–22 GB. O'zbekcha model 131072 kontekst bilan 23 GB, 74% CPU.
   Ollama app'ning global "Context length" = 256K, `OLLAMA_CONTEXT_LENGTH` env'ini bosib ketadi.

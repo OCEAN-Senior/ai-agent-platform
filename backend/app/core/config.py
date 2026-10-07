@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     # Model for tool calling (ToolAgent). Kept separate because a language-tuned chat
     # model (e.g. the Uzbek one) may answer in prose instead of calling tools.
     OLLAMA_TOOL_MODEL: str = "llama3.1:8b"
+    # Reasoning model for chat questions about numbers, tables or logic (picked automatically by
+    # services/llm/model_router.py). Empty = every chat message uses OLLAMA_MODEL.
+    REASONING_MODEL: str = ""
+    # Output cap for the reasoning model -- R1-style models can otherwise loop while thinking.
+    REASONING_MAX_TOKENS: int = 3072
     EMBEDDING_MODEL: str = "nomic-embed-text"
 
     # LLM_PROVIDER=openai_compatible: any OpenAI-compatible /v1 gateway, e.g. a
