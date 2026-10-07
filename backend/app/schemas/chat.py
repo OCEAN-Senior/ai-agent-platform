@@ -5,6 +5,8 @@ class ChatRequest(BaseModel):
     message: str
     session_id: str | None = None
     user_name: str | None = None
+    # Search this session's uploaded documents and give relevant excerpts to the model.
+    use_documents: bool = False
 
 
 class ChatResponse(BaseModel):

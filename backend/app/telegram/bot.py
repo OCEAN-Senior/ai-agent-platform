@@ -5,6 +5,7 @@ compose service) and talks to the platform over its HTTP API, so conversation
 memory, provider routing (Ollama / OmniRoute) and future features live in one place.
 """
 import asyncio
+import base64
 import contextlib
 import logging
 
@@ -19,9 +20,13 @@ from backend.app.core.logging_config import configure_logging
 logger = logging.getLogger("ai_agent_platform.telegram_bot")
 
 TELEGRAM_MESSAGE_LIMIT = 4000
+# Telegram bots can download files up to 20 MB.
+MAX_FILE_BYTES = 20 * 1024 * 1024
 
 START_TEXT = (
     "Assalomu alaykum! Men AI yordamchiman. Savolingiz yoki vazifangizni yozing.\n\n"
+    "Hujjat (PDF, Word, TXT) yuborsangiz — o'qib olaman va u haqida savollarga javob beraman. "
+    "Jadval (Excel .xlsx, CSV) yuborsangiz — tahlil qilaman. Hujjatlaringizni faqat siz ishlatasiz.\n\n"
     "Buyruqlar:\n"
     "/clear — yangi mavzu boshlash (AI oldingi suhbatni hisobga olmaydi)\n\n"
     "⚠️ Diqqat: suhbatlaringiz ish maqsadida saqlanadi va ularni administrator ko'rishi mumkin. "
@@ -54,7 +59,12 @@ async def _ask_platform(session_id: str, message: str, user_name: str) -> str:
     async with httpx.AsyncClient(timeout=300.0) as client:
         response = await client.post(
             f"{settings.PLATFORM_URL}/api/v1/chat",
-            json={"message": message, "session_id": session_id, "user_name": user_name},
+            json={
+                "message": message,
+                "session_id": session_id,
+                "user_name": user_name,
+                "use_documents": True,
+            },
             headers=_headers(),
         )
         response.raise_for_status()
@@ -114,6 +124,61 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await _send_long(update, reply)
 
 
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    doc = update.message.document
+    filename = doc.file_name or "fayl"
+    if doc.file_size and doc.file_size > MAX_FILE_BYTES:
+        await update.message.reply_text("Fayl juda katta (20 MB dan oshmasin).")
+        return
+
+    chat_id = update.effective_chat.id
+    lock = _chat_locks.setdefault(chat_id, asyncio.Lock())
+    async with lock:
+        typing = asyncio.create_task(_keep_typing(context, chat_id))
+        try:
+            tg_file = await context.bot.get_file(doc.file_id)
+            data = bytes(await tg_file.download_as_bytearray())
+            async with httpx.AsyncClient(timeout=600.0) as client:
+                response = await client.post(
+                    f"{settings.PLATFORM_URL}/api/v1/files/ingest",
+                    json={
+                        "filename": filename,
+                        "content_base64": base64.b64encode(data).decode(),
+                        "session_id": _session_id(update),
+                        "user_name": _user_name(update),
+                    },
+                    headers=_headers(),
+                )
+            if response.status_code == 415:
+                reply = "Bu format qo'llab-quvvatlanmaydi. PDF, Word (.docx), TXT, CSV yoki Excel (.xlsx) yuboring."
+            elif response.status_code == 422:
+                reply = f"Faylni o'qib bo'lmadi: {response.json().get('detail', '')}"
+            else:
+                response.raise_for_status()
+                result = response.json()
+                if result["kind"] == "document":
+                    reply = (
+                        f"'{filename}' o'qildi ({result['chunks']} bo'lak). "
+                        "Endi bu hujjat haqida savol berishingiz mumkin."
+                    )
+                else:
+                    reply = f"'{filename}' jadvali tahlil qilindi. Endi u haqida savol bering."
+        except Exception:
+            logger.exception("file ingest failed for %s", _session_id(update))
+            reply = "Kechirasiz, faylni qayta ishlab bo'lmadi. Birozdan keyin qayta urinib ko'ring."
+        finally:
+            typing.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await typing
+    await update.message.reply_text(reply)
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text(
+        "Rasm tahlili hozircha mavjud emas. Matn yozing yoki hujjat (PDF, Word, Excel) yuboring."
+    )
+
+
 async def handle_unauthorized(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message:
         logger.warning("unauthorized user id=%s", update.effective_user.id if update.effective_user else "?")
@@ -142,6 +207,8 @@ def main() -> None:
     app.add_handler(CommandHandler("start", cmd_start, filters=allowed))
     app.add_handler(CommandHandler("clear", cmd_clear, filters=allowed))
     app.add_handler(MessageHandler(allowed & filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(allowed & filters.Document.ALL, handle_document))
+    app.add_handler(MessageHandler(allowed & filters.PHOTO, handle_photo))
     app.add_handler(MessageHandler(~allowed, handle_unauthorized), group=1)
     app.add_error_handler(on_error)
 

@@ -27,6 +27,10 @@ class Settings(BaseSettings):
 
     QDRANT_URL: str = "http://localhost:6333"
     QDRANT_COLLECTION: str = "documents"
+    # Per-user document search in chat: how many excerpts, and the minimum cosine
+    # similarity for an excerpt to be included at all.
+    RAG_TOP_K: int = 3
+    RAG_MIN_SCORE: float = 0.6
 
     # Self-hosted SearXNG instance for the web_search tool -- no API key,
     # no third-party account, queries never leave our own infrastructure.

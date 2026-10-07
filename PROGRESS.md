@@ -2,6 +2,19 @@
 
 > Har sessiya oxirida yangilanadi. Eng yangi yozuv eng tepada.
 
+## 2026-10-07 — Milestone 22 (a): hujjat + Excel ✅
+- Har xodimning hujjatlari alohida: Qdrant payload `owner` (tg:<id>) + `source`; egasiz qidiruv faqat umumiy hujjatlarni ko'radi;
+  qayta yuklash almashtiradi. `POST /api/v1/files/ingest` (base64): PDF/DOCX/TXT → shaxsiy RAG, CSV/XLSX → xulosa suhbatga.
+  Chat'da `use_documents` (faqat model ko'radi). Bot: hujjat qabul qiladi (20 MB), rasmga "hozircha yo'q".
+- Topilgan va tuzatilgan: Qdrant ~5s dan keyin bo'sh keep-alive ulanishni yopadi → birinchi so'rov "Server disconnected"
+  (500) — `_retry_once`. `nomic-embed-text` uchun `search_document:` / `search_query:` prefikslari qo'shildi.
+- O'lchov: nomic o'zbekcha matnda tegishli/tegishsiz savollarni yaxshi ajratmaydi (ballar 0.63–0.72 oralig'ida aralash),
+  shuning uchun RAG_MIN_SCORE=0.6 + qat'iy prompt. **Haqiqiy yechim — ko'p tilli embedding (masalan bge-m3, ~1.2 GB,
+  1024 o'lcham → Qdrant kolleksiyasini qayta yaratish kerak); foydalanuvchi ruxsati bilan.**
+- Sinov: `ai-launcher/m22_test.sh` — A/B izolyatsiya, KAPALAK-8812, takrorlanmaslik, Excel, 415 — hammasi o'tdi.
+
+**Keyingi:** (b) niqoblash + bulut (xodim tasdig'i bilan), (c) admin veb panel.
+
 ## 2026-10-06 (2) — AI Brain birlashtirildi (Milestone 21)
 **Qilindi**
 - Suhbat xotirasi doimiy (SQLite, volume `app_data`): restartdan keyin davom etadi; `/clear` tarixni o'chirmaydi.
