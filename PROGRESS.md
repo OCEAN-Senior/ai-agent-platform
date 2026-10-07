@@ -2,6 +2,16 @@
 
 > Har sessiya oxirida yangilanadi. Eng yangi yozuv eng tepada.
 
+## 2026-10-07 — RAM: modellar GPU'ga sig'adigan qilindi ✅
+- Muammo: RAM 86% — `llama-server` 16–22 GB. O'zbekcha model 131072 kontekst bilan 23 GB, 74% CPU.
+  Ollama app'ning global "Context length" = 256K, `OLLAMA_CONTEXT_LENGTH` env'ini bosib ketadi.
+- Yechim: `uzbek-llama-8k` va `llama3.1-8k` (PARAMETER num_ctx 8192, og'irliklar umumiy) + `OLLAMA_MAX_LOADED_MODELS=1`
+  (User env). OmniRoute'da qayta import, `.env`: `OLLAMA_MODEL=uzbek-llama-8k:latest`, `OLLAMA_TOOL_MODEL=llama3.1-8k:latest`.
+- Natija: 5.8 GB, 100% GPU, chat 1.1–1.5 s (avval 4.5–11 s), RAM 27 → 14.7 GB. Tool agent ishlaydi (4183).
+- Yo'l-yo'lakay: Docker Desktop ishga tushmadi — kechagi majburan yopishdan qolgan eskirgan AF_UNIX socket fayllari
+  (`Docker\run\dockerInference`, `docker-secrets-engine\engine.sock`; Windows'dan 1920-xato) — WSL `rm` bilan o'chirildi.
+  `stop_all.ps1` endi avval `docker desktop stop` (to'g'ri yopish), keyin zaxira sifatida kill.
+
 ## 2026-10-07 — Milestone 24 (c): admin veb panel ✅
 - `/admin` (frontend/admin.html + backend/app/api/admin_router.py): xodimlar ro'yxati, to'liq suhbatlar (/clear dan oldingilari
   xiralashgan holda), bulutga yuborilganlar (asl ↔ niqoblangan ↔ javob). HTTP Basic, parol `.env` dagi `ADMIN_PASSWORD`
