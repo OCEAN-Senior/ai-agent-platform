@@ -8,6 +8,8 @@
 - Yechim: `uzbek-llama-8k` va `llama3.1-8k` (PARAMETER num_ctx 8192, og'irliklar umumiy) + `OLLAMA_MAX_LOADED_MODELS=1`
   (User env). OmniRoute'da qayta import, `.env`: `OLLAMA_MODEL=uzbek-llama-8k:latest`, `OLLAMA_TOOL_MODEL=llama3.1-8k:latest`.
 - Natija: 5.8 GB, 100% GPU, chat 1.1–1.5 s (avval 4.5–11 s), RAM 27 → 14.7 GB. Tool agent ishlaydi (4183).
+- Coder ham 8K: `qwen2.5-coder-8k:latest` (32K da 6.8 GB, 8% CPU edi → 5.0 GB, 100% GPU); compose `OLLAMA_CODER_MODEL` ni
+  `.env` dan uzatadi. To'liq sinov (`ai-launcher/full_test.sh`, ~2 daqiqa) — hammasi o'tdi, sinovdan keyin RAM 14.4 GB.
 - Yo'l-yo'lakay: Docker Desktop ishga tushmadi — kechagi majburan yopishdan qolgan eskirgan AF_UNIX socket fayllari
   (`Docker\run\dockerInference`, `docker-secrets-engine\engine.sock`; Windows'dan 1920-xato) — WSL `rm` bilan o'chirildi.
   `stop_all.ps1` endi avval `docker desktop stop` (to'g'ri yopish), keyin zaxira sifatida kill.

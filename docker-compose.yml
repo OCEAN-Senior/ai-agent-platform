@@ -15,6 +15,7 @@ services:
       - CLOUD_MODEL=${CLOUD_MODEL:-}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1:8b}
       - OLLAMA_TOOL_MODEL=${OLLAMA_TOOL_MODEL:-llama3.1:8b}
+      - OLLAMA_CODER_MODEL=${OLLAMA_CODER_MODEL:-qwen2.5-coder:7b}
       - QDRANT_URL=http://qdrant:6333
       - SEARXNG_URL=http://searxng:8080
     extra_hosts:
