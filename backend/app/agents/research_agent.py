@@ -1,6 +1,7 @@
 import logging
 
 from backend.app.agents.base import AgentInput, AgentResult, BaseAgent
+from backend.app.core.config import settings
 from backend.app.services.chat_service import get_chat_response
 from backend.app.services.rag.rag_service import retrieve_context
 
@@ -26,7 +27,11 @@ class ResearchAgent(BaseAgent):
 
     async def run(self, agent_input: AgentInput) -> AgentResult:
         try:
-            context_chunks = await retrieve_context(agent_input.task)
+            # Without a minimum score the top chunks are returned even when unrelated,
+            # and the model then mixes them into its answer.
+            context_chunks = await retrieve_context(
+                agent_input.task, min_score=settings.RAG_MIN_SCORE
+            )
         except Exception:
             logger.warning("RAG retrieval failed, falling back to knowledge-only", exc_info=True)
             context_chunks = []
