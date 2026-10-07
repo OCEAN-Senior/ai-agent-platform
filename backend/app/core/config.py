@@ -49,6 +49,11 @@ class Settings(BaseSettings):
         "Always reply in Uzbek (o'zbek tili, Latin script) unless the user explicitly "
         "asks for another language. Don't mix in English sentences."
     )
+    # Cloud fallback: full OpenAI-compatible gateway model id (e.g. an official API model
+    # added to OmniRoute). Empty = disabled -- nothing is ever sent to a cloud model.
+    CLOUD_MODEL: str = ""
+    # How many recent messages (masked) go to the cloud model as context.
+    CLOUD_CONTEXT_MESSAGES: int = 6
     # How many recent messages are sent to the model as context per session.
     MEMORY_MAX_MESSAGES: int = 20
 

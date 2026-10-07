@@ -10,9 +10,16 @@ import contextlib
 import logging
 
 import httpx
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ChatAction
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from backend.app.core.config import settings
 from backend.app.core.logging_config import configure_logging
@@ -32,6 +39,15 @@ START_TEXT = (
     "⚠️ Diqqat: suhbatlaringiz ish maqsadida saqlanadi va ularni administrator ko'rishi mumkin. "
     "Shaxsiy yoki maxfiy ma'lumotlarni keraksiz yubormang."
 )
+
+CLOUD_BUTTON = InlineKeyboardMarkup(
+    [[InlineKeyboardButton("☁️ Kuchliroq AI'dan so'rash", callback_data="cloud:preview")]]
+)
+HIDDEN_LABELS = {
+    "TEL": "telefon", "PASPORT": "pasport", "JSHSHIR": "JSHSHIR", "STIR": "STIR",
+    "KARTA": "karta", "HISOB": "hisob raqam", "EMAIL": "email", "SUMMA": "summa",
+    "MANZIL": "manzil", "ISM": "ism",
+}
 
 # One lock per chat: a user's messages are answered in order; different users run in parallel.
 _chat_locks: dict[int, asyncio.Lock] = {}
@@ -78,20 +94,22 @@ async def _keep_typing(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None
         await asyncio.sleep(4)
 
 
-async def _send_long(update: Update, text: str) -> None:
+async def _send_long(update: Update, text: str, reply_markup=None) -> None:
     text = text or "(bo'sh javob)"
+    message = update.effective_message
     chunk = ""
     for part in text.split("\n\n"):
         if chunk and len(chunk) + len(part) + 2 > TELEGRAM_MESSAGE_LIMIT:
-            await update.message.reply_text(chunk)
+            await message.reply_text(chunk)
             chunk = part
         else:
             chunk = f"{chunk}\n\n{part}" if chunk else part
         while len(chunk) > TELEGRAM_MESSAGE_LIMIT:
-            await update.message.reply_text(chunk[:TELEGRAM_MESSAGE_LIMIT])
+            await message.reply_text(chunk[:TELEGRAM_MESSAGE_LIMIT])
             chunk = chunk[TELEGRAM_MESSAGE_LIMIT:]
     if chunk:
-        await update.message.reply_text(chunk)
+        # Buttons go on the last part only.
+        await message.reply_text(chunk, reply_markup=reply_markup)
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -121,7 +139,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             typing.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await typing
-    await _send_long(update, reply)
+    await _send_long(update, reply, reply_markup=CLOUD_BUTTON)
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -179,6 +197,76 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
 
 
+async def _post(path: str, payload: dict, timeout: float = 30.0) -> httpx.Response:
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        return await client.post(f"{settings.PLATFORM_URL}{path}", json=payload, headers=_headers())
+
+
+async def handle_cloud(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Inline buttons: preview the masked question, then send or cancel it."""
+    query = update.callback_query
+    if update.effective_user.id not in _allowed_user_ids():
+        await query.answer("Huquqingiz yo'q.", show_alert=True)
+        return
+    await query.answer()
+    session_id = _session_id(update)
+    action, _, request_id = query.data.removeprefix("cloud:").partition(":")
+
+    if action == "preview":
+        response = await _post("/api/v1/cloud/preview", {"session_id": session_id})
+        if response.status_code != 200:
+            await query.message.reply_text("Bulutga yuboriladigan savol topilmadi.")
+            return
+        data = response.json()
+        if not data["enabled"]:
+            await query.message.reply_text(
+                "Kuchliroq (bulut) AI hali sozlanmagan. Administrator bilan bog'laning."
+            )
+            return
+        hidden = ", ".join(f"{HIDDEN_LABELS.get(k, k)}: {n}" for k, n in data["hidden"].items()) or "hech narsa"
+        text = (
+            "Bulut AI'ga quyidagi ko'rinishda yuboriladi:\n\n"
+            f"{data['masked_question'][:3000]}\n\n"
+            f"Yashirildi — {hidden} (oldingi {data['context_messages'] - 1} ta xabar ham shunday yashiriladi).\n\n"
+            "⚠️ Tekshiring: yashirilmagan maxfiy ma'lumot qolgan bo'lsa, yubormang. "
+            "Yashirilgan raqamlar bilan AI hisob-kitob qila olmaydi."
+        )
+        buttons = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Yuborish", callback_data=f"cloud:send:{data['request_id']}"),
+            InlineKeyboardButton("❌ Bekor qilish", callback_data=f"cloud:cancel:{data['request_id']}"),
+        ]])
+        await query.message.reply_text(text, reply_markup=buttons)
+        return
+
+    if not request_id.isdigit():
+        return
+    payload = {"request_id": int(request_id), "session_id": session_id}
+    await query.edit_message_reply_markup(reply_markup=None)  # one decision per preview
+    if action == "cancel":
+        await _post("/api/v1/cloud/cancel", payload)
+        await query.message.reply_text("Bekor qilindi. Hech narsa yuborilmadi.")
+        return
+    if action == "send":
+        chat_id = update.effective_chat.id
+        lock = _chat_locks.setdefault(chat_id, asyncio.Lock())
+        async with lock:
+            typing = asyncio.create_task(_keep_typing(context, chat_id))
+            try:
+                response = await _post("/api/v1/cloud/send", payload, timeout=300.0)
+                if response.status_code == 200:
+                    reply = "☁️ " + response.json()["response"]
+                else:
+                    reply = response.json().get("detail", "Bulut AI javob bermadi.")
+            except Exception:
+                logger.exception("cloud send failed for %s", session_id)
+                reply = "Kechirasiz, bulut AI hozir javob bera olmadi."
+            finally:
+                typing.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await typing
+        await _send_long(update, reply)
+
+
 async def handle_unauthorized(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.message:
         logger.warning("unauthorized user id=%s", update.effective_user.id if update.effective_user else "?")
@@ -209,6 +297,7 @@ def main() -> None:
     app.add_handler(MessageHandler(allowed & filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(MessageHandler(allowed & filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(allowed & filters.PHOTO, handle_photo))
+    app.add_handler(CallbackQueryHandler(handle_cloud, pattern=r"^cloud:"))
     app.add_handler(MessageHandler(~allowed, handle_unauthorized), group=1)
     app.add_error_handler(on_error)
 

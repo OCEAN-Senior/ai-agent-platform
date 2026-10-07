@@ -12,11 +12,18 @@ from backend.app.agents.manager import AgentExecutionError, AgentManager, AgentN
 from backend.app.agents.orchestrator import MultiAgentOrchestrator
 from backend.app.schemas.agent import AgentRunRequest
 from backend.app.schemas.chat import ChatHistoryResponse, ChatRequest, ChatResponse
+from backend.app.schemas.cloud import (
+    CloudActionRequest,
+    CloudPreviewRequest,
+    CloudPreviewResponse,
+    CloudSendResponse,
+)
 from backend.app.schemas.execution import ExecuteCodeRequest, ExecuteCodeResponse
 from backend.app.schemas.files import FileIngestRequest, FileIngestResponse
 from backend.app.schemas.orchestration import OrchestrateRequest, OrchestrateResponse
 from backend.app.schemas.rag import IngestRequest, IngestResponse, RagQueryRequest, RagQueryResponse
 from backend.app.services.chat_service import get_chat_response, stream_chat_response
+from backend.app.services.cloud.cloud_service import CloudRequestError, CloudService
 from backend.app.services.execution.sandbox import run_python_code
 from backend.app.services.files.extract import (
     DOCUMENT_TYPES,
@@ -35,6 +42,7 @@ router = APIRouter()
 agent_manager = AgentManager()
 orchestrator = MultiAgentOrchestrator(agent_manager)
 conversation_memory = ConversationMemory()
+cloud_service = CloudService(conversation_memory)
 
 
 async def _prompt_for(request: ChatRequest) -> str:
@@ -152,6 +160,32 @@ async def ingest_file(request: FileIngestRequest) -> FileIngestResponse:
         return FileIngestResponse(kind="spreadsheet", filename=filename, chunks=0)
 
     raise HTTPException(status_code=415, detail=f"Unsupported file type: {suffix or '(none)'}")
+
+
+@router.post("/api/v1/cloud/preview", response_model=CloudPreviewResponse)
+def cloud_preview(request: CloudPreviewRequest) -> CloudPreviewResponse:
+    """Mask the session's latest question (+ context) and park it until the user confirms."""
+    try:
+        return CloudPreviewResponse(**cloud_service.preview(request.session_id))
+    except CloudRequestError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/api/v1/cloud/send", response_model=CloudSendResponse)
+async def cloud_send(request: CloudActionRequest) -> CloudSendResponse:
+    try:
+        return CloudSendResponse(response=await cloud_service.send(request.request_id, request.session_id))
+    except CloudRequestError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/api/v1/cloud/cancel")
+def cloud_cancel(request: CloudActionRequest) -> dict:
+    try:
+        cloud_service.cancel(request.request_id, request.session_id)
+    except CloudRequestError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"status": "cancelled"}
 
 
 @router.post("/api/v1/rag/query", response_model=RagQueryResponse)

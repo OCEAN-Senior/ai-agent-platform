@@ -21,12 +21,14 @@ class OpenAICompatibleProvider(LLMProvider):
         base_url: str | None = None,
         api_key: str | None = None,
         model: str | None = None,
+        model_prefix: str | None = None,
     ):
         self.base_url = (base_url or settings.OPENAI_COMPAT_BASE_URL).rstrip("/")
         self.api_key = api_key if api_key is not None else settings.OPENAI_COMPAT_API_KEY
         # Model names stay as in OLLAMA_MODEL / OLLAMA_CODER_MODEL; the gateway's
         # routing prefix (e.g. "ollama/") is added here.
-        self.model = settings.OPENAI_COMPAT_MODEL_PREFIX + (model or settings.OLLAMA_MODEL)
+        prefix = settings.OPENAI_COMPAT_MODEL_PREFIX if model_prefix is None else model_prefix
+        self.model = prefix + (model or settings.OLLAMA_MODEL)
 
     async def chat(self, message: str, history: list[dict[str, str]] | None = None) -> str:
         messages = [*(history or []), {"role": "user", "content": message}]

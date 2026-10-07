@@ -2,6 +2,22 @@
 
 > Har sessiya oxirida yangilanadi. Eng yangi yozuv eng tepada.
 
+## 2026-10-07 — Milestone 23 (b): niqoblash + bulut zaxirasi ✅ (bulut modeli hali TANLANMAGAN)
+- `services/privacy/masking.py`: TEL, PASPORT, JSHSHIR, STIR, KARTA, HISOB, EMAIL, SUMMA, MANZIL, ISM → `[TEL_1]`...;
+  bir xil qiymat = bir xil belgi; `unmask()` qavssiz/"TEL 1" variantlarini ham qaytaradi. `tests/test_masking.py` (6 test, pytest).
+- `services/cloud/cloud_service.py` + `/api/v1/cloud/{preview,send,cancel}`: preview oxirgi savolni (+ kontekst, CLOUD_CONTEXT_MESSAGES=6)
+  niqoblab `cloud_requests` jadvaliga yozadi (asl matn va mapping lokal qoladi); send faqat o'sha sessiyadan, bir marta;
+  javob unmask qilinib suhbatga yoziladi. Admin uchun: asl, niqobli, model javobi — hammasi `cloud_requests` da.
+- Bot: har javob ostida "☁️ Kuchliroq AI'dan so'rash" → niqoblangan ko'rinish + "✅ Yuborish / ❌ Bekor qilish".
+- **`CLOUD_MODEL` bo'sh = o'chiq** (bot "sozlanmagan" deydi). Foydalanuvchi bulut modelini hali tanlamadi:
+  tavsiya — rasmiy API (Claude/GPT/Gemini) o'z kaliti bilan OmniRoute'ga qo'shiladi; OmniRoute'dagi bepul hovuzlar
+  (dva, aug, cxa, ddgw, oc, zc, cfp...) norasmiy/noma'lum operatorlar — ish ma'lumoti uchun tavsiya qilinmagan.
+  Yoqish: `.env` da `CLOUD_MODEL=<gateway model id>` → `docker compose up -d backend`.
+- Sinov: `ai-launcher/m23_test.sh` ("bulut" o'rnida LOKAL ollama/llama3.1:8b) — niqoblash, sizib chiqish yo'q, unmask,
+  egalik tekshiruvi, qayta yuborish va bekor qilish — o'tdi.
+
+**Keyingi:** (c) admin veb panel (barcha suhbatlar + cloud_requests, faqat admin; parolni foydalanuvchi `.env` ga o'zi qo'yadi).
+
 ## 2026-10-07 — Milestone 22 (a): hujjat + Excel ✅
 - Har xodimning hujjatlari alohida: Qdrant payload `owner` (tg:<id>) + `source`; egasiz qidiruv faqat umumiy hujjatlarni ko'radi;
   qayta yuklash almashtiradi. `POST /api/v1/files/ingest` (base64): PDF/DOCX/TXT → shaxsiy RAG, CSV/XLSX → xulosa suhbatga.
