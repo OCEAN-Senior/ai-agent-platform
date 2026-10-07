@@ -2,6 +2,15 @@
 
 > Har sessiya oxirida yangilanadi. Eng yangi yozuv eng tepada.
 
+## 2026-10-07 — Milestone 24 (c): admin veb panel ✅
+- `/admin` (frontend/admin.html + backend/app/api/admin_router.py): xodimlar ro'yxati, to'liq suhbatlar (/clear dan oldingilari
+  xiralashgan holda), bulutga yuborilganlar (asl ↔ niqoblangan ↔ javob). HTTP Basic, parol `.env` dagi `ADMIN_PASSWORD`
+  (bo'sh = panel 503, ochilmaydi). **Parolni foydalanuvchi o'zi qo'yadi** → `docker compose up -d backend`.
+- Xavfsizlik: compose portlari 127.0.0.1 ga bog'landi (backend 8000, qdrant 6333, searxng 8080) — avval barcha
+  interfeyslarda ochiq edi, Qdrant'da parol yo'q (xodim hujjatlari LAN'dan o'qilishi mumkin edi).
+- Sinov `ai-launcher/m24_test.sh`: 503 / 401 / 200, ro'yxat va xabarlar, portlar, OmniRoute→SearXNG — o'tdi.
+  Claude sinovlaridan qolgan test sessiyalari bazadan tozalandi.
+
 ## 2026-10-07 — Milestone 23 (b): niqoblash + bulut zaxirasi ✅ (bulut modeli hali TANLANMAGAN)
 - `services/privacy/masking.py`: TEL, PASPORT, JSHSHIR, STIR, KARTA, HISOB, EMAIL, SUMMA, MANZIL, ISM → `[TEL_1]`...;
   bir xil qiymat = bir xil belgi; `unmask()` qavssiz/"TEL 1" variantlarini ham qaytaradi. `tests/test_masking.py` (6 test, pytest).

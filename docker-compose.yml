@@ -2,13 +2,14 @@ services:
   backend:
     build: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       # Provider choice + gateway key come from .env via compose interpolation;
       # only these are passed in, so the rest of .env (e.g. API_KEYS) doesn't leak in.
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
       - OPENAI_COMPAT_BASE_URL=http://host.docker.internal:20128/v1
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - OPENAI_COMPAT_API_KEY=${OPENAI_COMPAT_API_KEY:-}
       - OPENAI_COMPAT_MODEL_PREFIX=${OPENAI_COMPAT_MODEL_PREFIX:-ollama/}
       - CLOUD_MODEL=${CLOUD_MODEL:-}
@@ -59,7 +60,7 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     ports:
-      - "6333:6333"
+      - "127.0.0.1:6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
     restart: unless-stopped
@@ -67,7 +68,7 @@ services:
   searxng:
     image: searxng/searxng:latest
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./searxng:/etc/searxng:rw
     environment:

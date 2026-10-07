@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin panel</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1f2328; --muted:#6b7078; --line:#e3e1dc; --accent:#b5652b; --user:#eef3fb; --warn:#fff4e5; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16181d; --card:#1f2229; --text:#e8e6e1; --muted:#9a9890; --line:#33363d; --accent:#e0975a; --user:#22303f; --warn:#3a2f1e; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; gap:16px; align-items:center; padding:12px 20px; border-bottom:1px solid var(--line); background:var(--card); position:sticky; top:0; }
+  header h1 { font-size:17px; margin:0; }
+  nav button { border:1px solid var(--line); background:transparent; color:var(--text); padding:6px 12px; border-radius:8px; cursor:pointer; }
+  nav button.active { border-color:var(--accent); color:var(--accent); font-weight:600; }
+  main { display:grid; grid-template-columns: 320px 1fr; gap:16px; padding:16px 20px; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; }
+  .session { padding:10px; border-radius:8px; cursor:pointer; border:1px solid transparent; }
+  .session:hover, .session.active { border-color:var(--accent); }
+  .muted { color:var(--muted); font-size:13px; }
+  .msg { padding:10px 12px; border-radius:10px; margin:8px 0; white-space:pre-wrap; word-break:break-word; }
+  .msg.user { background:var(--user); }
+  .msg.cleared { opacity:.55; }
+  .msg .meta { font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .cloud { border-left:3px solid var(--accent); }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  pre { white-space:pre-wrap; word-break:break-word; margin:4px 0; background:var(--bg); padding:8px; border-radius:8px; font-size:13px; }
+  .badge { font-size:12px; padding:1px 8px; border-radius:99px; border:1px solid var(--line); }
+  input { width:100%; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); margin-bottom:8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔒 Admin panel</h1>
+  <nav><button id="tab-chats" class="active">Suhbatlar</button> <button id="tab-cloud">Bulutga yuborilganlar</button></nav>
+  <span class="muted" id="status"></span>
+</header>
+<main id="view-chats">
+  <section class="card"><input id="filter" placeholder="Qidirish (ism yoki ID)"><div id="sessions"></div></section>
+  <section class="card" id="messages"><p class="muted">Chapdan xodimni tanlang.</p></section>
+</main>
+<main id="view-cloud" style="display:none; grid-template-columns:1fr"><section class="card" id="cloud"></section></main>
+<script>
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const when = iso => iso ? new Date(iso).toLocaleString() : "";
+async function api(path) {
+  const r = await fetch(path, {credentials: "same-origin"});
+  if (!r.ok) throw new Error(r.status + " " + (await r.text()));
+  return r.json();
+}
+let sessions = [];
+async function loadSessions() {
+  sessions = await api("/admin/api/sessions");
+  document.getElementById("status").textContent = sessions.length + " ta suhbat";
+  renderSessions();
+}
+function renderSessions() {
+  const q = document.getElementById("filter").value.toLowerCase();
+  document.getElementById("sessions").innerHTML = sessions
+    .filter(s => (s.user_name || "").toLowerCase().includes(q) || s.session_id.toLowerCase().includes(q))
+    .map(s => `<div class="session" data-id="${esc(s.session_id)}">
+      <b>${esc(s.user_name || s.session_id)}</b><br>
+      <span class="muted">${esc(s.session_id)} · ${s.messages} xabar${s.cloud_sent ? " · ☁️ " + s.cloud_sent : ""}<br>oxirgi: ${when(s.updated_at)}</span>
+    </div>`).join("") || '<p class="muted">Hali suhbat yo\'q.</p>';
+  document.querySelectorAll(".session").forEach(el => el.onclick = () => openSession(el.dataset.id, el));
+}
+async function openSession(id, el) {
+  document.querySelectorAll(".session").forEach(e => e.classList.remove("active"));
+  el.classList.add("active");
+  const msgs = await api("/admin/api/sessions/" + encodeURIComponent(id) + "/messages");
+  document.getElementById("messages").innerHTML = `<h3 style="margin-top:0">${esc(el.querySelector("b").textContent)}</h3>
+    <p class="muted">Xiralashgan xabarlar — xodim /clear qilgan (AI ularni endi hisobga olmaydi, lekin saqlangan).</p>` +
+    msgs.map(m => `<div class="msg ${m.role === "user" ? "user" : ""} ${m.cleared ? "cleared" : ""} ${m.content.startsWith("[☁️") ? "cloud" : ""}">
+      <div class="meta">${m.role === "user" ? "👤 Xodim" : "🤖 AI"} · ${when(m.created_at)}</div>${esc(m.content)}</div>`).join("");
+}
+async function loadCloud() {
+  const rows = await api("/admin/api/cloud-requests");
+  document.getElementById("cloud").innerHTML = rows.length ? rows.map(r => {
+    const orig = JSON.parse(r.original_json || "[]"), masked = JSON.parse(r.masked_json || "[]");
+    return `<div class="card" style="margin-bottom:12px">
+      <b>${esc(r.user_name || r.session_id)}</b> <span class="badge">${esc(r.status)}</span>
+      <span class="muted">${when(r.created_at)} ${r.model ? "· " + esc(r.model) : ""}</span>
+      <div class="grid2">
+        <div><div class="muted">Asl savol (lokal qoldi)</div><pre>${esc(orig.at(-1)?.content)}</pre></div>
+        <div><div class="muted">Bulutga ketgan (niqoblangan)</div><pre>${esc(masked.at(-1)?.content)}</pre></div>
+      </div>
+      ${r.response ? `<div class="muted">Javob (xodim ko'rgani)</div><pre>${esc(r.response)}</pre>` : ""}
+    </div>`;
+  }).join("") : '<p class="muted">Bulutga hali hech narsa yuborilmagan.</p>';
+}
+function show(tab) {
+  document.getElementById("view-chats").style.display = tab === "chats" ? "" : "none";
+  document.getElementById("view-cloud").style.display = tab === "cloud" ? "" : "none";
+  document.getElementById("tab-chats").classList.toggle("active", tab === "chats");
+  document.getElementById("tab-cloud").classList.toggle("active", tab === "cloud");
+  if (tab === "cloud") loadCloud().catch(e => alert(e));
+}
+document.getElementById("tab-chats").onclick = () => show("chats");
+document.getElementById("tab-cloud").onclick = () => show("cloud");
+document.getElementById("filter").oninput = renderSessions;
+loadSessions().catch(e => document.getElementById("status").textContent = "Xato: " + e.message);
+</script>
+</body>
+</html>

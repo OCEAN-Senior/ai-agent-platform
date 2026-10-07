@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from backend.app.api.admin_router import router as admin_router
 from backend.app.api.public_router import router as public_router
 from backend.app.api.v1.router import router as v1_router
 from backend.app.core.config import settings
@@ -60,6 +61,7 @@ app.add_middleware(LoggingMiddleware)
 
 app.include_router(public_router)
 app.include_router(v1_router, dependencies=[Depends(verify_api_key)])
+app.include_router(admin_router)  # own password (ADMIN_PASSWORD), not API_KEYS
 
 _FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 if _FRONTEND_DIR.is_dir():

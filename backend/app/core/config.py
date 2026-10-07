@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # must be set before this is reachable outside localhost).
     API_KEYS: str = ""
 
+    # Password for the /admin panel (all conversations). Empty = panel disabled.
+    ADMIN_PASSWORD: str = ""
+
     # Where persistent data lives (SQLite conversation memory). In Docker this is
     # the app_data volume mounted at /app/data.
     DATA_DIR: str = "data"
