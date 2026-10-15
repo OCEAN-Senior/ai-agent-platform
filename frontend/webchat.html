@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AI yordamchi</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1f2328; --muted:#6b7078; --line:#e3e1dc; --accent:#b5652b; --mine:#e9eef7; --danger:#b42318; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#16181d; --card:#1f2229; --text:#e8e6e1; --muted:#9a9890; --line:#33363d; --accent:#e0975a; --mine:#26313f; --danger:#f97066; } }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin:0; font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; }
+  header { display:flex; align-items:center; gap:10px; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; flex:1; }
+  header .who { color:var(--muted); font-size:13px; }
+  button { font:inherit; cursor:pointer; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--text); padding:7px 12px; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.5; cursor:default; }
+  #log { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px; max-width:860px; width:100%; margin:0 auto; }
+  .msg { max-width:88%; padding:10px 14px; border-radius:14px; white-space:pre-wrap; word-break:break-word; }
+  .msg.user { align-self:flex-end; background:var(--mine); }
+  .msg.bot { align-self:flex-start; background:var(--card); border:1px solid var(--line); }
+  .msg.note { align-self:center; color:var(--muted); font-size:13px; background:transparent; text-align:center; }
+  .msg .actions { margin-top:8px; }
+  .msg .actions button { font-size:13px; padding:4px 10px; }
+  .notice { color:var(--muted); font-size:13px; text-align:center; padding:4px 16px 0; }
+  form { display:flex; gap:8px; padding:10px 16px calc(10px + env(safe-area-inset-bottom)); background:var(--card); border-top:1px solid var(--line); max-width:860px; width:100%; margin:0 auto; }
+  textarea { flex:1; resize:none; font:inherit; padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--text); max-height:160px; }
+  .typing { color:var(--muted); font-style:italic; }
+  dialog { border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); max-width:min(560px, 92vw); }
+  dialog pre { white-space:pre-wrap; word-break:break-word; background:var(--bg); padding:10px; border-radius:8px; font:14px/1.5 ui-monospace, monospace; max-height:40vh; overflow:auto; }
+  dialog .row { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
+  .err { color:var(--danger); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 AI yordamchi</h1>
+  <span class="who" id="who"></span>
+  <button id="clear" title="Yangi mavzu: AI oldingi suhbatni hisobga olmaydi">Yangi mavzu</button>
+</header>
+<div class="notice">Suhbatlar ish maqsadida saqlanadi va ularni administrator ko'rishi mumkin.</div>
+<main id="log"></main>
+<form id="form">
+  <input type="file" id="file" accept=".pdf,.docx,.txt,.md,.csv,.xlsx" hidden>
+  <button type="button" id="attach" title="Hujjat (PDF, Word, TXT) yoki jadval (Excel, CSV) yuklash">📎</button>
+  <textarea id="input" rows="1" placeholder="Savolingizni yozing..." maxlength="4000"></textarea>
+  <button class="primary" id="send">Yuborish</button>
+</form>
+<dialog id="cloud">
+  <h3 style="margin-top:0">☁️ Kuchliroq AI'ga yuborish</h3>
+  <p>Quyidagi ko'rinishda yuboriladi (maxfiy ma'lumotlar yashirilgan):</p>
+  <pre id="masked"></pre>
+  <p class="err" id="hidden"></p>
+  <p style="font-size:13px">⚠️ Tekshiring: yashirilmagan maxfiy ma'lumot qolgan bo'lsa, yubormang. Yashirilgan raqamlar bilan AI hisob-kitob qila olmaydi.</p>
+  <div class="row"><button id="cloud-cancel">Bekor qilish</button><button class="primary" id="cloud-send">Yuborish</button></div>
+</dialog>
+<script>
+const $ = id => document.getElementById(id);
+const log = $("log"), input = $("input"), sendBtn = $("send");
+let busy = false, pendingCloud = null;
+const LABELS = {TEL:"telefon", PASPORT:"pasport", JSHSHIR:"JSHSHIR", STIR:"STIR", KARTA:"karta", HISOB:"hisob raqam", EMAIL:"email", SUMMA:"summa", MANZIL:"manzil", ISM:"ism"};
+
+async function api(path, body, method) {
+  const r = await fetch(path, {method: method || (body ? "POST" : "GET"), credentials: "same-origin",
+    headers: body ? {"Content-Type": "application/json"} : {}, body: body ? JSON.stringify(body) : undefined});
+  if (r.status === 401) { location.reload(); throw new Error("Havola yaroqsiz"); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || ("Xatolik " + r.status));
+  return data;
+}
+function add(role, text, withCloud) {
+  const div = document.createElement("div");
+  div.className = "msg " + role;
+  div.textContent = text;
+  if (withCloud) {
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const b = document.createElement("button");
+    b.textContent = "☁️ Kuchliroq AI'dan so'rash";
+    b.onclick = openCloud;
+    actions.appendChild(b);
+    div.appendChild(actions);
+  }
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+function setBusy(v) { busy = v; sendBtn.disabled = v; $("attach").disabled = v; }
+
+async function send(e) {
+  e && e.preventDefault();
+  const text = input.value.trim();
+  if (!text || busy) return;
+  input.value = ""; autosize();
+  add("user", text);
+  const typing = add("bot typing", "yozmoqda...");
+  setBusy(true);
+  try {
+    const data = await api("/api/chat", {message: text});
+    typing.remove();
+    add("bot", data.response, true);
+  } catch (err) {
+    typing.remove();
+    add("note err", "Xatolik: " + err.message);
+  } finally { setBusy(false); input.focus(); }
+}
+async function openCloud() {
+  if (busy) return;
+  try {
+    const p = await api("/api/cloud/preview", {});
+    if (!p.enabled) { add("note", "Kuchliroq (bulut) AI hali sozlanmagan. Administrator bilan bog'laning."); return; }
+    pendingCloud = p.request_id;
+    $("masked").textContent = p.masked_question;
+    const hidden = Object.entries(p.hidden).map(([k, n]) => (LABELS[k] || k) + ": " + n).join(", ");
+    $("hidden").textContent = "Yashirildi — " + (hidden || "hech narsa");
+    $("cloud").showModal();
+  } catch (err) { add("note err", "Xatolik: " + err.message); }
+}
+$("cloud-cancel").onclick = async () => {
+  $("cloud").close();
+  if (pendingCloud) { await api("/api/cloud/cancel", {request_id: pendingCloud}).catch(() => {}); add("note", "Bekor qilindi. Hech narsa yuborilmadi."); }
+  pendingCloud = null;
+};
+$("cloud-send").onclick = async () => {
+  $("cloud").close();
+  const id = pendingCloud; pendingCloud = null;
+  const typing = add("bot typing", "kuchliroq AI yozmoqda...");
+  setBusy(true);
+  try { const d = await api("/api/cloud/send", {request_id: id}); typing.remove(); add("bot", "☁️ " + d.response); }
+  catch (err) { typing.remove(); add("note err", "Xatolik: " + err.message); }
+  finally { setBusy(false); }
+};
+$("attach").onclick = () => $("file").click();
+$("file").onchange = async () => {
+  const f = $("file").files[0]; $("file").value = "";
+  if (!f) return;
+  if (f.size > 20 * 1024 * 1024) { add("note err", "Fayl juda katta (20 MB dan oshmasin)."); return; }
+  add("user", "📎 " + f.name);
+  const typing = add("bot typing", "fayl o'qilmoqda...");
+  setBusy(true);
+  try {
+    const b64 = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1]); r.onerror = bad; r.readAsDataURL(f); });
+    const d = await api("/api/upload", {filename: f.name, content_base64: b64});
+    typing.remove();
+    add("bot", d.kind === "document" ? `'${d.filename}' o'qildi (${d.chunks} bo'lak). Endi bu hujjat haqida savol berishingiz mumkin.`
+                                     : `'${d.filename}' jadvali tahlil qilindi. Endi u haqida savol bering.`);
+  } catch (err) { typing.remove(); add("note err", "Faylni o'qib bo'lmadi: " + err.message); }
+  finally { setBusy(false); }
+};
+$("clear").onclick = async () => {
+  if (!confirm("Yangi mavzu boshlansinmi? AI oldingi suhbatni hisobga olmaydi.")) return;
+  await api("/api/clear", {}).catch(() => {});
+  log.innerHTML = ""; add("note", "Yangi mavzu boshlandi.");
+};
+function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 160) + "px"; }
+input.addEventListener("input", autosize);
+input.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+$("form").onsubmit = send;
+
+(async () => {
+  try {
+    const me = await api("/api/me"); $("who").textContent = me.name;
+    const h = await api("/api/history");
+    if (!h.history.length) add("note", "Assalomu alaykum! Savolingizni yozing yoki 📎 orqali hujjat yuboring.");
+    h.history.forEach(m => add(m.role === "user" ? "user" : "bot", m.content));
+  } catch (err) { add("note err", err.message); }
+  input.focus();
+})();
+</script>
+</body>
+</html>

@@ -2,6 +2,24 @@
 
 > Har sessiya oxirida yangilanadi. Eng yangi yozuv eng tepada.
 
+## 2026-10-15 — Milestone 26: foydalanuvchilarga ruxsat boshqaruvi + veb-chat (ofis tarmog'i) ✅
+- **Telegram ruxsatlari bazada** (`services/telegram_access.py`, jadval `telegram_access`): `.env` dagi
+  TELEGRAM_ALLOWED_USER_IDS = adminlar (doim ruxsatli). Begona odam yozsa → `pending` so'rov, adminga Telegram'da
+  "✅ Ruxsat / ❌ Rad" tugmali xabar; ruxsat berilsa odamga xabar boradi. `/users` — ro'yxat va bloklash tugmalari.
+  Bot `gatekeeper` (TypeHandler, group -1) har update'da backend'dan so'raydi (30 s kesh).
+  DIQQAT: backend ham TELEGRAM_ALLOWED_USER_IDS ni olishi shart (compose) — aks holda admin "pending" bo'lib qolardi (topildi, tuzatildi).
+- **Veb-chat** (`backend/app/webchat/app.py` + `frontend/webchat.html`, compose `webchat`, port 8090 — barcha interfeyslarda,
+  ofis tarmog'i uchun ataylab): shaxsiy havola `/?t=TOKEN` → HttpOnly cookie → chat, tarix, hujjat yuklash, yangi mavzu,
+  kuchliroq AI. Faqat chat yo'llari; admin/API yo'q; daqiqasiga 30 so'rov cheklovi. Sessiya `web:<invite_id>`.
+- **Havolalar** (`services/invites.py`, jadval `invites`): token faqat yaratishda ko'rsatiladi, bazada SHA-256 xeshi.
+  Yaratish: Telegram'da `/havola Ism` (admin) yoki admin panel → "Foydalanuvchilar". Bekor qilish — tugma bilan.
+  `.env`: `WEBCHAT_BASE_URLS=http://192.168.2.163:8090`.
+- Admin panelda yangi "Foydalanuvchilar" bo'limi (Telegram so'rovlari + veb havolalar). Panel hali parolsiz (503).
+- Cloud preview endi "[Hujjat yuklandi]" yozuvini emas, oxirgi haqiqiy savolni oladi.
+- Sinov: `tests/test_access.py` (jami 24), `ai-launcher/m26_test.sh` (jonli), `full_test.sh` — o'tdi.
+- **Keyingi:** boshqa qurilmadan (telefon, shu Wi-Fi) havolani sinash — Windows firewall 8090 ni to'sishi mumkin;
+  internet uchun Cloudflare Tunnel (foydalanuvchi Cloudflare akkaunti ochadi).
+
 ## 2026-10-07 — Milestone 25: savol turiga qarab avtomatik model tanlash ✅ (DeepSeek OmniRoute importi kutilmoqda)
 - Solishtirish (`ai-launcher/compare_models.py`, natijalar `compare_result*.txt`): hisob/jadval/mantiq savollarida
   uzbek-llama-8k 0/3, deepseek-r1-8k 2/3 ("Sarda" ~ Sardor). O'zbekcha matnda ikkalasi zaif, faktlarda ikkalasi to'qiydi.

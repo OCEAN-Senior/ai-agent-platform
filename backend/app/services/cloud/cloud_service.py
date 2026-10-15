@@ -56,7 +56,11 @@ class CloudService:
 
     def preview(self, session_id: str) -> dict:
         history = self._memory.get_history(session_id)
-        last_user = max((i for i, m in enumerate(history) if m["role"] == "user"), default=None)
+        notes = ("[Hujjat yuklandi:", "[Yuklangan jadval:")
+        last_user = max(
+            (i for i, m in enumerate(history) if m["role"] == "user" and not m["content"].startswith(notes)),
+            default=None,
+        )
         if last_user is None:
             raise CloudRequestError("Bulutga yuboriladigan savol topilmadi.")
         # Context up to and including the latest question; the local answer is left out.

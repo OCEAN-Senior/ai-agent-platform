@@ -10,6 +10,8 @@ services:
       - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
       - OPENAI_COMPAT_BASE_URL=http://host.docker.internal:20128/v1
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - TELEGRAM_ALLOWED_USER_IDS=${TELEGRAM_ALLOWED_USER_IDS:-}
+      - WEBCHAT_BASE_URLS=${WEBCHAT_BASE_URLS:-http://127.0.0.1:8090}
       - OPENAI_COMPAT_API_KEY=${OPENAI_COMPAT_API_KEY:-}
       - OPENAI_COMPAT_MODEL_PREFIX=${OPENAI_COMPAT_MODEL_PREFIX:-ollama/}
       - CLOUD_MODEL=${CLOUD_MODEL:-}
@@ -58,6 +60,26 @@ services:
     healthcheck:
       # The image's HEALTHCHECK probes the API server, which this container doesn't run.
       disable: true
+
+  webchat:
+    build: .
+    command: ["uvicorn", "backend.app.webchat.app:app", "--host", "0.0.0.0", "--port", "8090",
+              "--proxy-headers", "--forwarded-allow-ips", "*"]
+    ports:
+      # Intentionally reachable from the office network: every route needs a personal invite,
+      # and this service only exposes chat endpoints (no admin, no raw API, no data).
+      - "8090:8090"
+    environment:
+      - PLATFORM_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   qdrant:
     image: qdrant/qdrant:latest

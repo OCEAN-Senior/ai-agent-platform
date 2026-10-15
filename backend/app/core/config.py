@@ -47,6 +47,9 @@ class Settings(BaseSettings):
 
     # Password for the /admin panel (all conversations). Empty = panel disabled.
     ADMIN_PASSWORD: str = ""
+    # Base URL(s) of the web chat, comma-separated (office network, tunnel), used to build
+    # personal invite links in the admin panel.
+    WEBCHAT_BASE_URLS: str = "http://127.0.0.1:8090"
 
     # Where persistent data lives (SQLite conversation memory). In Docker this is
     # the app_data volume mounted at /app/data.

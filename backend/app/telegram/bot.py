@@ -8,6 +8,7 @@ import asyncio
 import base64
 import contextlib
 import logging
+import time
 
 import httpx
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -15,9 +16,11 @@ from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
+    ApplicationHandlerStop,
     CommandHandler,
     ContextTypes,
     MessageHandler,
+    TypeHandler,
     filters,
 )
 
@@ -35,7 +38,9 @@ START_TEXT = (
     "Hujjat (PDF, Word, TXT) yuborsangiz — o'qib olaman va u haqida savollarga javob beraman. "
     "Jadval (Excel .xlsx, CSV) yuborsangiz — tahlil qilaman. Hujjatlaringizni faqat siz ishlatasiz.\n\n"
     "Buyruqlar:\n"
-    "/clear — yangi mavzu boshlash (AI oldingi suhbatni hisobga olmaydi)\n\n"
+    "/clear — yangi mavzu boshlash (AI oldingi suhbatni hisobga olmaydi)\n"
+    "/users — (faqat administrator) foydalanuvchilar va ruxsatlar\n"
+    "/havola Ism — (faqat administrator) shaxsiy veb-chat havolasi yaratish\n\n"
     "⚠️ Diqqat: suhbatlaringiz ish maqsadida saqlanadi va ularni administrator ko'rishi mumkin. "
     "Shaxsiy yoki maxfiy ma'lumotlarni keraksiz yubormang."
 )
@@ -49,11 +54,15 @@ HIDDEN_LABELS = {
     "MANZIL": "manzil", "ISM": "ism",
 }
 
+ACCESS_CACHE_SECONDS = 30
+_access_cache: dict[int, tuple[bool, float]] = {}
+_last_denied_reply: dict[int, float] = {}
+
 # One lock per chat: a user's messages are answered in order; different users run in parallel.
 _chat_locks: dict[int, asyncio.Lock] = {}
 
 
-def _allowed_user_ids() -> set[int]:
+def _admin_ids() -> set[int]:
     return {int(x) for x in settings.TELEGRAM_ALLOWED_USER_IDS.split(",") if x.strip().isdigit()}
 
 
@@ -205,9 +214,6 @@ async def _post(path: str, payload: dict, timeout: float = 30.0) -> httpx.Respon
 async def handle_cloud(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Inline buttons: preview the masked question, then send or cancel it."""
     query = update.callback_query
-    if update.effective_user.id not in _allowed_user_ids():
-        await query.answer("Huquqingiz yo'q.", show_alert=True)
-        return
     await query.answer()
     session_id = _session_id(update)
     action, _, request_id = query.data.removeprefix("cloud:").partition(":")
@@ -267,10 +273,143 @@ async def handle_cloud(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await _send_long(update, reply)
 
 
-async def handle_unauthorized(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if update.message:
-        logger.warning("unauthorized user id=%s", update.effective_user.id if update.effective_user else "?")
-        await update.message.reply_text("Kechirasiz, sizda bu botdan foydalanish huquqi yo'q.")
+async def _check_access(update: Update) -> dict:
+    user = update.effective_user
+    response = await _post("/api/v1/telegram/access", {"user_id": user.id, "name": _user_name(update)}, timeout=10.0)
+    response.raise_for_status()
+    return response.json()
+
+
+async def gatekeeper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Runs before every handler: lets allowed users through, turns strangers into access requests."""
+    user = update.effective_user
+    if user is None:
+        raise ApplicationHandlerStop
+    if update.callback_query and (update.callback_query.data or "").startswith(("acc:", "inv:")):
+        return  # admin approval buttons check admin rights themselves
+    cached = _access_cache.get(user.id)
+    if cached and time.monotonic() - cached[1] < ACCESS_CACHE_SECONDS:
+        allowed = cached[0]
+    else:
+        try:
+            result = await _check_access(update)
+        except Exception:
+            logger.exception("access check failed for %s", user.id)
+            raise ApplicationHandlerStop
+        allowed = result["allowed"]
+        _access_cache[user.id] = (allowed, time.monotonic())
+        if result.get("new_request"):
+            await _notify_admins(context, user.id, _user_name(update))
+    if allowed:
+        return
+    if update.callback_query:
+        await update.callback_query.answer("Huquqingiz yo'q.", show_alert=True)
+    elif update.effective_message and time.monotonic() - _last_denied_reply.get(user.id, 0) > 60:
+        _last_denied_reply[user.id] = time.monotonic()
+        await update.effective_message.reply_text(
+            "Sizda hali bu botdan foydalanish huquqi yo'q. So'rovingiz administratorga yuborildi — "
+            "ruxsat berilgach sizga xabar keladi."
+        )
+    raise ApplicationHandlerStop
+
+
+def _decision_buttons(user_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Ruxsat berish", callback_data=f"acc:allowed:{user_id}"),
+        InlineKeyboardButton("❌ Rad etish", callback_data=f"acc:blocked:{user_id}"),
+    ]])
+
+
+async def _notify_admins(context: ContextTypes.DEFAULT_TYPE, user_id: int, name: str) -> None:
+    for admin_id in _admin_ids():
+        try:
+            await context.bot.send_message(
+                admin_id,
+                f"🔔 Yangi so'rov: {name}\nTelegram ID: {user_id}\n\nBotdan foydalanishga ruxsat berasizmi?",
+                reply_markup=_decision_buttons(user_id),
+            )
+        except Exception:
+            logger.exception("could not notify admin %s", admin_id)
+
+
+async def handle_access_decision(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin pressed Allow / Block (from a request notification or the /users list)."""
+    query = update.callback_query
+    if update.effective_user.id not in _admin_ids():
+        await query.answer("Bu faqat administrator uchun.", show_alert=True)
+        return
+    _, status, user_id = query.data.split(":")
+    response = await _post(f"/api/v1/telegram/access/{user_id}", {"status": status}, timeout=10.0)
+    if response.status_code != 200:
+        await query.answer("Xatolik.", show_alert=True)
+        return
+    _access_cache.pop(int(user_id), None)
+    await query.answer("Saqlandi.")
+    label = "✅ Ruxsat berildi" if status == "allowed" else "🚫 Bloklandi"
+    await query.edit_message_text(f"{query.message.text}\n\n{label}")
+    if status == "allowed":
+        with contextlib.suppress(Exception):
+            await context.bot.send_message(
+                int(user_id), "✅ Sizga botdan foydalanishga ruxsat berildi! Savolingizni yozishingiz mumkin. /start"
+            )
+
+
+async def cmd_havola(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin: /havola Ism Familiya -> personal web chat link for that person."""
+    if update.effective_user.id not in _admin_ids():
+        return
+    name = " ".join(context.args).strip()
+    if not name:
+        await update.message.reply_text("Ismni ham yozing, masalan: /havola Aliyev Vali")
+        return
+    response = await _post("/api/v1/invites", {"name": name}, timeout=10.0)
+    if response.status_code != 200:
+        await update.message.reply_text("Havola yaratib bo'lmadi.")
+        return
+    invite = response.json()
+    links = "\n".join(invite["links"])
+    await update.message.reply_text(
+        f"🔗 {invite['name']} uchun shaxsiy veb-chat havolasi:\n\n{links}\n\n"
+        "Shu odamga yuboring. Havola faqat u uchun — boshqaga bermasin.",
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
+            "🚫 Havolani bekor qilish", callback_data=f"inv:revoke:{invite['id']}")]]),
+        disable_web_page_preview=True,
+    )
+
+
+async def handle_invite_revoke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if update.effective_user.id not in _admin_ids():
+        await query.answer("Bu faqat administrator uchun.", show_alert=True)
+        return
+    invite_id = query.data.rsplit(":", 1)[1]
+    response = await _post(f"/api/v1/invites/{invite_id}/revoke", {}, timeout=10.0)
+    await query.answer("Bekor qilindi." if response.status_code == 200 else "Allaqachon bekor qilingan.")
+    await query.edit_message_text(f"{query.message.text}\n\n🚫 Havola bekor qilindi.", disable_web_page_preview=True)
+
+
+async def cmd_users(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin: list everyone who asked for access, with buttons to change their status."""
+    if update.effective_user.id not in _admin_ids():
+        return
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{settings.PLATFORM_URL}/api/v1/telegram/access", headers=_headers())
+    users = response.json() if response.status_code == 200 else []
+    if not users:
+        await update.message.reply_text("Hali hech kim so'rov yubormagan. Odamlar botga yozsa, bu yerda ko'rinadi.")
+        return
+    icons = {"pending": "⏳", "allowed": "✅", "blocked": "🚫"}
+    for u in users[:30]:
+        if u["status"] == "allowed":
+            buttons = [[InlineKeyboardButton("🚫 Bloklash", callback_data=f"acc:blocked:{u['user_id']}")]]
+        elif u["status"] == "blocked":
+            buttons = [[InlineKeyboardButton("✅ Ruxsat berish", callback_data=f"acc:allowed:{u['user_id']}")]]
+        else:
+            buttons = _decision_buttons(u["user_id"]).inline_keyboard
+        await update.message.reply_text(
+            f"{icons.get(u['status'], '')} {u['name'] or u['user_id']}\nID: {u['user_id']}",
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
 
 
 async def on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -286,22 +425,24 @@ def main() -> None:
         logger.warning("TELEGRAM_BOT_TOKEN is not set -- Telegram bot not started.")
         return
 
-    allowed_ids = _allowed_user_ids()
-    if not allowed_ids:
-        logger.warning("TELEGRAM_ALLOWED_USER_IDS is empty -- nobody will be able to use the bot.")
-    allowed = filters.User(user_id=list(allowed_ids)) if allowed_ids else filters.User(user_id=[-1])
+    if not _admin_ids():
+        logger.warning("TELEGRAM_ALLOWED_USER_IDS is empty -- no admin will receive access requests.")
 
     app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).concurrent_updates(True).build()
-    app.add_handler(CommandHandler("start", cmd_start, filters=allowed))
-    app.add_handler(CommandHandler("clear", cmd_clear, filters=allowed))
-    app.add_handler(MessageHandler(allowed & filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(allowed & filters.Document.ALL, handle_document))
-    app.add_handler(MessageHandler(allowed & filters.PHOTO, handle_photo))
+    app.add_handler(TypeHandler(Update, gatekeeper), group=-1)
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("clear", cmd_clear))
+    app.add_handler(CommandHandler("users", cmd_users))
+    app.add_handler(CommandHandler("havola", cmd_havola))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(handle_cloud, pattern=r"^cloud:"))
-    app.add_handler(MessageHandler(~allowed, handle_unauthorized), group=1)
+    app.add_handler(CallbackQueryHandler(handle_access_decision, pattern=r"^acc:"))
+    app.add_handler(CallbackQueryHandler(handle_invite_revoke, pattern=r"^inv:"))
     app.add_error_handler(on_error)
 
-    logger.info("Telegram bot starting (long polling), %d allowed users", len(allowed_ids))
+    logger.info("Telegram bot starting (long polling), %d admin(s)", len(_admin_ids()))
     app.run_polling()
 
 

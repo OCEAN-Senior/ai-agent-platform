@@ -27,6 +27,8 @@ from backend.app.schemas.rag import IngestRequest, IngestResponse, RagQueryReque
 from backend.app.services.chat_service import get_chat_response, stream_chat_response
 from backend.app.services.cloud.cloud_service import CloudRequestError, CloudService
 from backend.app.services.execution.sandbox import run_python_code
+from backend.app.services.invites import InviteStore
+from backend.app.services.telegram_access import TelegramAccess
 from backend.app.services.llm.model_router import choose_model
 from backend.app.services.files.extract import (
     DOCUMENT_TYPES,
@@ -47,6 +49,8 @@ agent_manager = AgentManager()
 orchestrator = MultiAgentOrchestrator(agent_manager)
 conversation_memory = ConversationMemory()
 cloud_service = CloudService(conversation_memory)
+invite_store = InviteStore()
+telegram_access = TelegramAccess()
 
 
 async def _prompt_for(request: ChatRequest) -> str:
@@ -209,6 +213,52 @@ def cloud_cancel(request: CloudActionRequest) -> dict:
     except CloudRequestError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"status": "cancelled"}
+
+
+@router.post("/api/v1/telegram/access")
+def telegram_access_check(body: dict) -> dict:
+    """Bot gatekeeper: allowed? (unknown users become a pending request)."""
+    return telegram_access.check(int(body["user_id"]), body.get("name"))
+
+
+@router.get("/api/v1/telegram/access")
+def telegram_access_list() -> list[dict]:
+    return telegram_access.list()
+
+
+@router.post("/api/v1/telegram/access/{user_id}")
+def telegram_access_set(user_id: int, body: dict) -> dict:
+    if not telegram_access.set_status(user_id, body.get("status", "")):
+        raise HTTPException(status_code=404, detail="User not found or status invalid")
+    return {"user_id": user_id, "status": body["status"]}
+
+
+@router.post("/api/v1/invites")
+def invite_create(body: dict) -> dict:
+    """Used by the bot's admin-only /havola command."""
+    name = str(body.get("name", "")).strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    invite = invite_store.create(name)
+    bases = [u.strip().rstrip("/") for u in settings.WEBCHAT_BASE_URLS.split(",") if u.strip()]
+    invite["links"] = [f"{base}/?t={invite['token']}" for base in bases]
+    return invite
+
+
+@router.post("/api/v1/invites/{invite_id}/revoke")
+def invite_revoke_internal(invite_id: int) -> dict:
+    if not invite_store.revoke(invite_id):
+        raise HTTPException(status_code=404, detail="Invite not found or already revoked")
+    return {"id": invite_id, "revoked": True}
+
+
+@router.post("/api/v1/invites/verify")
+def invite_verify(body: dict) -> dict:
+    """Web chat: resolve a personal invite token to its user/session."""
+    invite = invite_store.verify(str(body.get("token", "")))
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Invalid or revoked invite")
+    return invite
 
 
 @router.post("/api/v1/rag/query", response_model=RagQueryResponse)

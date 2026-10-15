@@ -33,7 +33,7 @@
 <body>
 <header>
   <h1>🔒 Admin panel</h1>
-  <nav><button id="tab-chats" class="active">Suhbatlar</button> <button id="tab-cloud">Bulutga yuborilganlar</button></nav>
+  <nav><button id="tab-chats" class="active">Suhbatlar</button> <button id="tab-users">Foydalanuvchilar</button> <button id="tab-cloud">Bulutga yuborilganlar</button></nav>
   <span class="muted" id="status"></span>
 </header>
 <main id="view-chats">
@@ -41,6 +41,14 @@
   <section class="card" id="messages"><p class="muted">Chapdan xodimni tanlang.</p></section>
 </main>
 <main id="view-cloud" style="display:none; grid-template-columns:1fr"><section class="card" id="cloud"></section></main>
+<main id="view-users" style="display:none; grid-template-columns:1fr 1fr">
+  <section class="card"><h3 style="margin-top:0">📱 Telegram bot</h3>
+    <p class="muted">Odam botga yozsa, bu yerda (va sizning Telegramingizda) so'rov paydo bo'ladi.</p>
+    <div id="tg-users"></div></section>
+  <section class="card"><h3 style="margin-top:0">🔗 Veb-chat havolalari</h3>
+    <div style="display:flex; gap:8px"><input id="inv-name" placeholder="Ism, masalan: Aliyev Vali" style="margin:0"><button id="inv-create">Havola yaratish</button></div>
+    <div id="inv-new"></div><div id="inv-list"></div></section>
+</main>
 <script>
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const when = iso => iso ? new Date(iso).toLocaleString() : "";
@@ -90,14 +98,55 @@ async function loadCloud() {
   }).join("") : '<p class="muted">Bulutga hali hech narsa yuborilmagan.</p>';
 }
 function show(tab) {
-  document.getElementById("view-chats").style.display = tab === "chats" ? "" : "none";
-  document.getElementById("view-cloud").style.display = tab === "cloud" ? "" : "none";
-  document.getElementById("tab-chats").classList.toggle("active", tab === "chats");
-  document.getElementById("tab-cloud").classList.toggle("active", tab === "cloud");
+  for (const t of ["chats", "cloud", "users"]) {
+    document.getElementById("view-" + t).style.display = tab === t ? "" : "none";
+    document.getElementById("tab-" + t).classList.toggle("active", tab === t);
+  }
   if (tab === "cloud") loadCloud().catch(e => alert(e));
+  if (tab === "users") loadUsers().catch(e => alert(e));
 }
+async function post(path, body) {
+  const r = await fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+  if (!r.ok) throw new Error(r.status + " " + (await r.text()));
+  return r.json();
+}
+const STATUS = {pending: "⏳ Kutmoqda", allowed: "✅ Ruxsat bor", blocked: "🚫 Bloklangan"};
+async function loadUsers() {
+  const users = await api("/admin/api/telegram-users");
+  document.getElementById("tg-users").innerHTML = users.length ? users.map(u => `<div class="card" style="margin:8px 0">
+    <b>${esc(u.name || u.user_id)}</b> <span class="badge">${STATUS[u.status] || esc(u.status)}</span><br>
+    <span class="muted">ID: ${u.user_id} · so'rov: ${when(u.requested_at)}</span><br>
+    ${u.status !== "allowed" ? `<button data-uid="${u.user_id}" data-st="allowed">✅ Ruxsat berish</button>` : ""}
+    ${u.status !== "blocked" ? `<button data-uid="${u.user_id}" data-st="blocked">🚫 Bloklash</button>` : ""}
+  </div>`).join("") : '<p class="muted">Hali so\'rov yo\'q.</p>';
+  document.querySelectorAll("#tg-users button").forEach(b => b.onclick = async () => {
+    await post("/admin/api/telegram-users/" + b.dataset.uid, {status: b.dataset.st}); loadUsers();
+  });
+  const inv = await api("/admin/api/invites");
+  document.getElementById("inv-list").innerHTML = inv.invites.map(i => `<div class="card" style="margin:8px 0">
+    <b>${esc(i.name)}</b> ${i.revoked_at ? '<span class="badge">🚫 bekor qilingan</span>' : '<span class="badge">✅ faol</span>'}<br>
+    <span class="muted">yaratilgan: ${when(i.created_at)} · oxirgi kirish: ${i.last_used_at ? when(i.last_used_at) : "hali kirmagan"}</span><br>
+    ${i.revoked_at ? "" : `<button data-inv="${i.id}">🚫 Bekor qilish</button>`}
+  </div>`).join("");
+  document.querySelectorAll("#inv-list button").forEach(b => b.onclick = async () => {
+    if (!confirm("Havola bekor qilinsinmi? U odam endi kira olmaydi.")) return;
+    await post("/admin/api/invites/" + b.dataset.inv + "/revoke"); loadUsers();
+  });
+}
+document.getElementById("inv-create").onclick = async () => {
+  const name = document.getElementById("inv-name").value.trim();
+  if (!name) return alert("Ismni yozing");
+  const inv = await post("/admin/api/invites", {name});
+  document.getElementById("inv-name").value = "";
+  document.getElementById("inv-new").innerHTML = `<div class="card" style="margin:10px 0; border-color:var(--accent)">
+    <b>${esc(inv.name)}</b> uchun havola — <b>faqat hozir ko'rinadi</b>, nusxalab yuboring:` +
+    inv.links.map(l => `<pre>${esc(l)}</pre><button data-copy="${esc(l)}">📋 Nusxalash</button>`).join("") + `</div>`;
+  document.querySelectorAll("[data-copy]").forEach(b => b.onclick = () => { navigator.clipboard.writeText(b.dataset.copy); b.textContent = "✅ Nusxalandi"; });
+  loadUsers();
+};
 document.getElementById("tab-chats").onclick = () => show("chats");
 document.getElementById("tab-cloud").onclick = () => show("cloud");
+document.getElementById("tab-users").onclick = () => show("users");
 document.getElementById("filter").oninput = renderSessions;
 loadSessions().catch(e => document.getElementById("status").textContent = "Xato: " + e.message);
 </script>

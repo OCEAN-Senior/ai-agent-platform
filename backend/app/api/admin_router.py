@@ -13,6 +13,8 @@ from fastapi.responses import FileResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 from backend.app.core.config import settings
+from backend.app.services.invites import InviteStore
+from backend.app.services.telegram_access import TelegramAccess
 
 _security = HTTPBasic(realm="AI Agent Platform admin")
 _ADMIN_PAGE = Path(__file__).resolve().parents[3] / "frontend" / "admin.html"
@@ -90,3 +92,46 @@ def cloud_requests(limit: int = 200) -> list[dict]:
             (limit,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+_invites = InviteStore()
+_telegram = TelegramAccess()
+
+
+def _base_urls() -> list[str]:
+    return [u.strip().rstrip("/") for u in settings.WEBCHAT_BASE_URLS.split(",") if u.strip()]
+
+
+@router.get("/api/telegram-users")
+def telegram_users() -> list[dict]:
+    return _telegram.list()
+
+
+@router.post("/api/telegram-users/{user_id}")
+def telegram_user_set(user_id: int, body: dict) -> dict:
+    if not _telegram.set_status(user_id, body.get("status", "")):
+        raise HTTPException(status_code=404, detail="User not found or status invalid")
+    return {"user_id": user_id, "status": body["status"]}
+
+
+@router.get("/api/invites")
+def invites() -> dict:
+    return {"base_urls": _base_urls(), "invites": _invites.list()}
+
+
+@router.post("/api/invites")
+def invite_create(body: dict) -> dict:
+    name = str(body.get("name", "")).strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
+    invite = _invites.create(name)
+    # The token is only ever shown here, at creation time.
+    invite["links"] = [f"{base}/?t={invite['token']}" for base in _base_urls()]
+    return invite
+
+
+@router.post("/api/invites/{invite_id}/revoke")
+def invite_revoke(invite_id: int) -> dict:
+    if not _invites.revoke(invite_id):
+        raise HTTPException(status_code=404, detail="Invite not found or already revoked")
+    return {"id": invite_id, "revoked": True}
